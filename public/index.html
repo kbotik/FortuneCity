@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+<title>FortuneCity</title>
+<link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-icon">🏙️</span>
+    <strong>FortuneCity</strong>
+  </div>
+  <div class="bank">🏦 <span id="money">1500</span> €</div>
+</header>
+
+<main>
+
+<section class="players-panel">
+  <div class="panel-title">👥 Joueurs</div>
+  <div id="players"></div>
+</section>
+
+<section id="game">
+
+  <div id="board"></div>
+
+  <section class="controls">
+
+    <button id="roll" class="main-button">
+      🎲 Lancer les dés
+    </button>
+
+    <div id="dice" class="dice-result">🎲 🎲</div>
+
+    <div id="message" class="message">
+      🎮 À toi de jouer !
+    </div>
+
+    <div id="action" class="action"></div>
+
+    <button id="endTurn" class="secondary-button" disabled>
+      ➡️ Terminer le tour
+    </button>
+
+  </section>
+
+  <section class="log-panel">
+    <h2>📜 Journal</h2>
+    <div id="log"></div>
+  </section>
+
+</section>
+
+</main>
+
+<div id="modal" class="modal hidden">
+  <div class="modal-box">
+    <div id="modalContent"></div>
+    <button id="closeModal">OK</button>
+  </div>
+</div>
+
+<script src="game.js"></script>
+</body>
+</html>
