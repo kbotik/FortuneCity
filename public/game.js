@@ -1,17 +1,23 @@
-const board = document.getElementById("board");
 "use strict";
 
+const board = document.getElementById("board");
 const moneyElement = document.getElementById("money");
 const message = document.getElementById("message");
 const diceElement = document.getElementById("dice");
 const rollButton = document.getElementById("roll");
 const endTurnButton = document.getElementById("endTurn");
+const newGameButton = document.getElementById("newGame");
 const actionElement = document.getElementById("action");
 const playersElement = document.getElementById("players");
 const logElement = document.getElementById("log");
+const modal = document.getElementById("modal");
+const modalContent = document.getElementById("modalContent");
+const closeModalButton = document.getElementById("closeModal");
 
 const START_MONEY = 1500;
 const PASS_START_BONUS = 200;
+const BONUS_AMOUNT = 150;
+const PLAYER_COLORS = ["#2563eb", "#db2777", "#16a34a", "#ea580c"];
 
 const players = [
     {
@@ -19,72 +25,78 @@ const players = [
         emoji: "👨‍💼",
         money: START_MONEY,
         position: 0,
-        properties: []
+        properties: [],
+        bankrupt: false
     },
     {
         name: "Joueur 2",
         emoji: "👩‍💼",
         money: START_MONEY,
         position: 0,
-        properties: []
+        properties: [],
+        bankrupt: false
     }
 ];
 
 let currentPlayer = 0;
 let rolling = false;
 let gameOver = false;
-let pendingAction = null;
+let turnId = 0;
 
 const cellsData = [
-    {type:"start", name:"DÉPART", icon:"🚩"},
-    {type:"property", name:"Rue 1", price:100},
-    {type:"property", name:"Rue 2", price:120},
-    {type:"station", name:"Gare", icon:"🚂"},
-    {type:"property", name:"Rue 3", price:140},
-    {type:"jail", name:"PRISON", icon:"🚓"},
+    {type: "start", name: "DÉPART", icon: "🚩"},
+    {type: "property", name: "Rue 1", price: 100},
+    {type: "property", name: "Rue 2", price: 120},
+    {type: "station", name: "Gare", icon: "🚂"},
+    {type: "property", name: "Rue 3", price: 140},
+    {type: "jail", name: "PRISON", icon: "🚓"},
 
-    {type:"property", name:"Rue 4", price:160},
-    {type:"bonus", name:"Bonus", icon:"🎁"},
-    {type:"property", name:"Rue 5", price:180},
-    {type:"property", name:"Rue 6", price:200},
-    {type:"tax", name:"Taxe", amount:100, icon:"💰"},
-    {type:"property", name:"Rue 7", price:220},
+    {type: "property", name: "Rue 4", price: 160},
+    {type: "bonus", name: "Bonus", icon: "🎁"},
+    {type: "property", name: "Rue 5", price: 180},
+    {type: "property", name: "Rue 6", price: 200},
+    {type: "tax", name: "Taxe", amount: 100, icon: "💰"},
+    {type: "property", name: "Rue 7", price: 220},
 
-    {type:"property", name:"Rue 8", price:240},
-    {type:"chance", name:"Chance", icon:"🎲"},
-    {type:"property", name:"Rue 9", price:260},
-    {type:"bonus", name:"Bonus", icon:"🎁"},
-    {type:"property", name:"Rue 10", price:280},
-    {type:"tax", name:"Impôt", amount:150, icon:"💸"},
+    {type: "property", name: "Rue 8", price: 240},
+    {type: "chance", name: "Chance", icon: "🎲"},
+    {type: "property", name: "Rue 9", price: 260},
+    {type: "bonus", name: "Bonus", icon: "🎁"},
+    {type: "property", name: "Rue 10", price: 280},
+    {type: "tax", name: "Impôt", amount: 150, icon: "💸"},
 
-    {type:"property", name:"Rue 11", price:300},
-    {type:"property", name:"Rue 12", price:320},
-    {type:"property", name:"Rue 13", price:340},
-    {type:"property", name:"Rue 14", price:360},
-    {type:"property", name:"Rue 15", price:380},
-    {type:"station", name:"Gare", icon:"🚂"},
+    {type: "property", name: "Rue 11", price: 300},
+    {type: "property", name: "Rue 12", price: 320},
+    {type: "property", name: "Rue 13", price: 340},
+    {type: "property", name: "Rue 14", price: 360},
+    {type: "property", name: "Rue 15", price: 380},
+    {type: "station", name: "Gare", icon: "🚂"},
 
-    {type:"property", name:"Rue 16", price:400},
-    {type:"property", name:"Rue 17", price:420},
-    {type:"property", name:"Rue 18", price:440},
-    {type:"chance", name:"Chance", icon:"🎲"},
-    {type:"property", name:"Rue 19", price:460},
-    {type:"property", name:"Rue 20", price:480},
+    {type: "property", name: "Rue 16", price: 400},
+    {type: "property", name: "Rue 17", price: 420},
+    {type: "property", name: "Rue 18", price: 440},
+    {type: "chance", name: "Chance", icon: "🎲"},
+    {type: "property", name: "Rue 19", price: 460},
+    {type: "property", name: "Rue 20", price: 480},
 
-    {type:"property", name:"Rue 21", price:500},
-    {type:"chance", name:"Chance", icon:"🎲"},
-    {type:"property", name:"Rue 22", price:520},
-    {type:"property", name:"Rue 23", price:540},
-    {type:"property", name:"Rue 24", price:560},
-    {type:"parking", name:"Parking", icon:"🅿️"}
+    {type: "property", name: "Rue 21", price: 500},
+    {type: "chance", name: "Chance", icon: "🎲"},
+    {type: "property", name: "Rue 22", price: 520},
+    {type: "property", name: "Rue 23", price: 540},
+    {type: "property", name: "Rue 24", price: 560},
+    {type: "parking", name: "Parking", icon: "🅿️"}
 ];
+
+function formatMoney(amount) {
+    return `${amount.toLocaleString("fr-FR")} €`;
+}
 
 function log(text) {
     if (!logElement) return;
 
     const line = document.createElement("div");
+    line.className = "log-line";
     line.textContent = text;
-
     logElement.prepend(line);
 
     while (logElement.children.length > 8) {
@@ -95,89 +107,117 @@ function log(text) {
 function updateMoney() {
     if (!moneyElement) return;
 
-    const player = players[currentPlayer];
-    moneyElement.textContent =
-        `${player.money.toLocaleString("fr-FR")} €`;
+    moneyElement.textContent = players[currentPlayer].money.toLocaleString("fr-FR");
 }
 
 function updatePlayers() {
     if (!playersElement) return;
 
-    playersElement.innerHTML = "";
+    playersElement.replaceChildren();
 
     players.forEach((player, index) => {
         const box = document.createElement("div");
+        box.className = "player-card";
 
-        box.className =
-            "player-card" +
-            (index === currentPlayer ? " active" : "");
+        if (index === currentPlayer) {
+            box.classList.add("active");
+        }
 
-        box.innerHTML = `
-            <strong>${player.emoji} ${player.name}</strong>
-            <div>💰 ${player.money.toLocaleString("fr-FR")} €</div>
-        `;
+        if (player.bankrupt) {
+            box.classList.add("bankrupt");
+        }
+
+        const name = document.createElement("div");
+        name.className = "player-name";
+        name.textContent = `${player.emoji} ${player.name}`;
+
+        const money = document.createElement("div");
+        money.className = "player-money";
+        money.textContent = `💰 ${formatMoney(player.money)}`;
+
+        box.append(name, money);
+
+        if (player.properties.length > 0) {
+            const properties = document.createElement("div");
+            properties.className = "player-properties";
+            properties.textContent =
+                `🏠 ${player.properties.join(", ")}`;
+            box.appendChild(properties);
+        }
 
         playersElement.appendChild(box);
     });
 }
 
-function getPlayerTokens(position) {
-    return players
-        .map((player, index) => {
-            if (player.position !== position) return "";
+function getPropertyOwnerIndex(cell) {
+    if (cell.type !== "property") return -1;
 
-            const tokenClass =
-                index === 1 ? "token two" :
-                index === 2 ? "token three" :
-                "token";
-
-            return `<span class="${tokenClass}">
-                ${player.emoji}
-            </span>`;
-        })
-        .join("");
+    return players.findIndex(player =>
+        player.properties.includes(cell.name)
+    );
 }
 
 function createBoard() {
     if (!board) return;
 
-    board.innerHTML = "";
-
-    /*
-     * Le plateau possède EXACTEMENT 36 cases.
-     * CSS Grid 6 × 6.
-     */
-    board.style.display = "grid";
-    board.style.gridTemplateColumns = "repeat(6, minmax(0, 1fr))";
-    board.style.gridTemplateRows = "repeat(6, minmax(0, 1fr))";
+    board.replaceChildren();
 
     cellsData.forEach((cell, index) => {
         const element = document.createElement("div");
-
         element.className = `cell cell-${cell.type}`;
         element.dataset.position = index;
 
-        let content = "";
+        if (players[currentPlayer].position === index) {
+            element.classList.add("active");
+        }
+
+        const ownerIndex = getPropertyOwnerIndex(cell);
+        if (ownerIndex !== -1) {
+            element.classList.add("property-owned");
+            element.style.setProperty(
+                "--owner-color",
+                PLAYER_COLORS[ownerIndex % PLAYER_COLORS.length]
+            );
+            element.title = `Propriété de ${players[ownerIndex].name}`;
+        }
 
         if (cell.icon) {
-            content += `<div class="cell-icon">${cell.icon}</div>`;
+            const icon = document.createElement("div");
+            icon.className = "cell-icon";
+            icon.textContent = cell.icon;
+            element.appendChild(icon);
         }
 
-        content += `<div class="cell-name">${cell.name}</div>`;
+        const name = document.createElement("div");
+        name.className = "cell-name";
+        name.textContent = cell.name;
+        element.appendChild(name);
 
         if (cell.type === "property") {
-            content += `<div class="cell-price">${cell.price} €</div>`;
+            const price = document.createElement("div");
+            price.className = "cell-price";
+            price.textContent = formatMoney(cell.price);
+            element.appendChild(price);
         }
 
-        element.innerHTML = content;
+        const tokens = players
+            .map((player, playerIndex) => ({player, playerIndex}))
+            .filter(({player}) => player.position === index);
 
-        const tokens = getPlayerTokens(index);
+        if (tokens.length > 0) {
+            const tokensElement = document.createElement("div");
+            tokensElement.className = "tokens";
 
-        if (tokens) {
-            element.insertAdjacentHTML(
-                "beforeend",
-                `<div class="tokens">${tokens}</div>`
-            );
+            tokens.forEach(({player, playerIndex}) => {
+                const token = document.createElement("span");
+                token.className = "token";
+                if (playerIndex === 1) token.classList.add("two");
+                if (playerIndex === 2) token.classList.add("three");
+                token.textContent = player.emoji;
+                tokensElement.appendChild(token);
+            });
+
+            element.appendChild(tokensElement);
         }
 
         board.appendChild(element);
@@ -186,34 +226,6 @@ function createBoard() {
 
 function updateBoard() {
     createBoard();
-
-    players.forEach((player, index) => {
-        const cell = board.querySelector(
-            `[data-position="${player.position}"]`
-        );
-
-        if (!cell) return;
-
-        const tokens = cell.querySelector(".tokens");
-
-        if (!tokens) {
-            cell.insertAdjacentHTML(
-                "beforeend",
-                `<div class="tokens">
-                    <span class="player-token player-${index}">
-                        ${player.emoji}
-                    </span>
-                </div>`
-            );
-        } else {
-            tokens.insertAdjacentHTML(
-                "beforeend",
-                `<span class="player-token player-${index}">
-                    ${player.emoji}
-                </span>`
-            );
-        }
-    });
 }
 
 function showMessage(text) {
@@ -222,30 +234,54 @@ function showMessage(text) {
     }
 }
 
-function updateAction(text = "") {
+function updateAction() {
     if (actionElement) {
-        actionElement.innerHTML = text;
+        actionElement.replaceChildren();
     }
+}
+
+function addActionButton(label, className, handler) {
+    if (!actionElement) return;
+
+    const button = document.createElement("button");
+    button.className = className;
+    button.textContent = label;
+    button.addEventListener("click", handler, {once: true});
+    actionElement.appendChild(button);
 }
 
 function rollDie() {
     return Math.floor(Math.random() * 6) + 1;
 }
 
+function isActiveTurn(playerIndex, actionTurnId) {
+    return (
+        !gameOver &&
+        currentPlayer === playerIndex &&
+        turnId === actionTurnId
+    );
+}
+
 function rollDice() {
     if (rolling || gameOver) return;
 
     rolling = true;
+    turnId += 1;
+
+    const playerIndex = currentPlayer;
+    const actionTurnId = turnId;
+    const player = players[playerIndex];
+    const die1 = rollDie();
+    const die2 = rollDie();
+    const total = die1 + die2;
 
     if (rollButton) {
         rollButton.disabled = true;
     }
-
-    const player = players[currentPlayer];
-
-    const die1 = rollDie();
-    const die2 = rollDie();
-    const total = die1 + die2;
+    if (endTurnButton) {
+        endTurnButton.disabled = true;
+    }
+    updateAction();
 
     if (diceElement) {
         diceElement.textContent = `${die1} + ${die2} = ${total}`;
@@ -254,174 +290,118 @@ function rollDice() {
     showMessage(
         `${player.emoji} ${player.name} lance ${die1} + ${die2} = ${total}`
     );
-
     log(`🎲 ${player.name} lance ${die1} + ${die2} = ${total}.`);
 
-    movePlayer(total);
+    movePlayer(
+        total,
+        playerIndex,
+        actionTurnId,
+        () => resolveCell(playerIndex, actionTurnId)
+    );
 }
 
-function movePlayer(steps) {
-    const player = players[currentPlayer];
-function movePlayer(steps) {
-    const player = players[currentPlayer];
-
-    if (steps <= 0) {
-        updateBoard();
-        updateMoney();
-        setTimeout(resolveCell, 350);
-        return;
-    }
-
+function movePlayer(steps, playerIndex, actionTurnId, onComplete) {
+    const player = players[playerIndex];
     let moved = 0;
 
-    function moveOneStep() {
+    const moveOneStep = () => {
+        if (!isActiveTurn(playerIndex, actionTurnId)) return;
+
         if (moved >= steps) {
             updateBoard();
             updateMoney();
-            setTimeout(resolveCell, 350);
+            setTimeout(() => {
+                if (isActiveTurn(playerIndex, actionTurnId)) {
+                    onComplete();
+                }
+            }, 350);
             return;
         }
 
         const previousPosition = player.position;
+        player.position = (player.position + 1) % cellsData.length;
 
-        player.position =
-            (player.position + 1) % cellsData.length;
-
-        // Passage par DÉPART
         if (player.position === 0 && previousPosition !== 0) {
             player.money += PASS_START_BONUS;
-
             log(
-                `🚩 ${player.name} passe par le départ et reçoit ${PASS_START_BONUS} €.`
+                `🚩 ${player.name} passe par le départ et reçoit ` +
+                `${formatMoney(PASS_START_BONUS)}.`
             );
         }
 
-        moved++;
-
+        moved += 1;
         updateBoard();
         updateMoney();
-
-        // Animation case par case
+        updatePlayers();
         setTimeout(moveOneStep, 180);
-    }
+    };
 
     moveOneStep();
 }
 
-    const oldPosition = player.position;
+function resolveCell(playerIndex, actionTurnId) {
+    if (!isActiveTurn(playerIndex, actionTurnId)) return;
 
-    player.position =
-        (player.position + steps) % cellsData.length;
-
-    if (oldPosition + steps >= cellsData.length) {
-        player.money += PASS_START_BONUS;
-
-        log(
-            `🚩 ${player.name} passe par le départ et reçoit ${PASS_START_BONUS} €.`
-        );
-    }
-
-    updateBoard();
-    updateMoney();
-    updatePlayers();
-
-    setTimeout(resolveCell, 350);
-}
-
-function resolveCell() {
-    const player = players[currentPlayer];
+    const player = players[playerIndex];
     const cell = cellsData[player.position];
-
-    updateAction("");
+    updateAction();
 
     if (cell.type === "property") {
-        handleProperty(cell);
+        handleProperty(cell, playerIndex, actionTurnId);
         return;
     }
 
     if (cell.type === "tax") {
-        payTax(cell.amount);
+        payTax(cell.amount, playerIndex, actionTurnId);
         return;
     }
 
     if (cell.type === "bonus") {
-        receiveBonus();
+        receiveBonus(playerIndex, actionTurnId);
         return;
     }
 
     if (cell.type === "chance") {
-        drawChance();
+        drawChance(playerIndex, actionTurnId);
         return;
     }
 
-    if (cell.type === "jail") {
-        showMessage("🚓 Tu es simplement de passage en prison.");
-        finishRoll();
-        return;
-    }
+    const messages = {
+        jail: "🚓 Tu es simplement de passage en prison.",
+        station: "🚂 Gare ! Rien à payer.",
+        parking: "🅿️ Parking gratuit.",
+        start: "🚩 Tu es sur le départ."
+    };
 
-    if (cell.type === "station") {
-        showMessage("🚂 Gare ! Rien à payer.");
-        finishRoll();
-        return;
-    }
-
-    if (cell.type === "parking") {
-        showMessage("🅿️ Parking gratuit.");
-        finishRoll();
-        return;
-    }
-
-    if (cell.type === "start") {
-        showMessage("🚩 Tu es sur le départ.");
-        finishRoll();
-        return;
-    }
-
-    finishRoll();
+    showMessage(messages[cell.type] || "Bonne continuation !");
+    finishRoll(playerIndex, actionTurnId);
 }
 
-function handleProperty(cell) {
-    const player = players[currentPlayer];
+function handleProperty(cell, playerIndex, actionTurnId) {
+    if (!isActiveTurn(playerIndex, actionTurnId)) return;
 
-    const ownerIndex = players.findIndex(
-        p => p.properties.includes(cell.name)
-    );
+    const player = players[playerIndex];
+    const ownerIndex = getPropertyOwnerIndex(cell);
 
     if (ownerIndex === -1) {
-        showMessage(
-            `${cell.name} est libre : ${cell.price} €`
+        showMessage(`${cell.name} est libre : ${formatMoney(cell.price)}`);
+
+        addActionButton(
+            `🏠 Acheter pour ${formatMoney(cell.price)}`,
+            "buy-button",
+            () => buyProperty(cell, playerIndex, actionTurnId)
         );
-
-        updateAction(`
-            <button class="buy-button" id="buyProperty">
-                🏠 Acheter pour ${cell.price} €
-            </button>
-            <button class="skip-button" id="skipProperty">
-                ⏭️ Ne pas acheter
-            </button>
-        `);
-
-        const buy = document.getElementById("buyProperty");
-        const skip = document.getElementById("skipProperty");
-
-        if (buy) {
-            buy.onclick = () => buyProperty(cell);
-        }
-
-        if (skip) {
-            skip.onclick = () => {
-                updateAction("");
-                finishRoll();
-            };
-        }
-
+        addActionButton(
+            "⏭️ Ne pas acheter",
+            "skip-button",
+            () => finishRoll(playerIndex, actionTurnId)
+        );
         return;
     }
 
-    if (ownerIndex === currentPlayer) {
+    if (ownerIndex === playerIndex) {
         showMessage(`🏠 ${cell.name} t'appartient.`);
-        finishRoll();
+        finishRoll(playerIndex, actionTurnId);
         return;
     }
 
@@ -432,22 +412,28 @@ function handleProperty(cell) {
     owner.money += rent;
 
     showMessage(
-        `💸 ${player.name} paie ${rent} € de loyer à ${owner.name}.`
+        `💸 ${player.name} paie ${formatMoney(rent)} de loyer ` +
+        `à ${owner.name}.`
     );
-
-    log(
-        `🏠 ${player.name} paie ${rent} € à ${owner.name}.`
-    );
+    log(`🏠 ${player.name} paie ${formatMoney(rent)} à ${owner.name}.`);
 
     updateMoney();
     updatePlayers();
 
-    checkBankruptcy();
-    finishRoll();
+    if (checkBankruptcy(playerIndex)) return;
+    finishRoll(playerIndex, actionTurnId);
 }
 
-function buyProperty(cell) {
-    const player = players[currentPlayer];
+function buyProperty(cell, playerIndex, actionTurnId) {
+    if (!isActiveTurn(playerIndex, actionTurnId)) return;
+
+    const player = players[playerIndex];
+    if (getPropertyOwnerIndex(cell) !== -1) {
+        showMessage("❌ Cette propriété vient d'être achetée.");
+        updateAction();
+        finishRoll(playerIndex, actionTurnId);
+        return;
+    }
 
     if (player.money < cell.price) {
         showMessage("❌ Tu n'as pas assez d'argent.");
@@ -458,159 +444,148 @@ function buyProperty(cell) {
     player.properties.push(cell.name);
 
     showMessage(
-        `🏠 ${player.name} achète ${cell.name} pour ${cell.price} €.`
+        `🏠 ${player.name} achète ${cell.name} pour ` +
+        `${formatMoney(cell.price)}.`
     );
-
     log(
-        `🏠 ${player.name} achète ${cell.name} pour ${cell.price} €.`
+        `🏠 ${player.name} achète ${cell.name} pour ` +
+        `${formatMoney(cell.price)}.`
     );
 
-    updateAction("");
+    updateAction();
+    updateBoard();
     updateMoney();
     updatePlayers();
-
-    finishRoll();
+    finishRoll(playerIndex, actionTurnId);
 }
 
-function payTax(amount) {
-    const player = players[currentPlayer];
-
+function payTax(amount, playerIndex, actionTurnId) {
+    const player = players[playerIndex];
     player.money -= amount;
 
-    showMessage(
-        `💰 Tu paies ${amount} € de taxe.`
-    );
-
-    log(
-        `💰 ${player.name} paie ${amount} € de taxe.`
-    );
-
+    showMessage(`💰 Tu paies ${formatMoney(amount)} de taxe.`);
+    log(`💰 ${player.name} paie ${formatMoney(amount)} de taxe.`);
     updateMoney();
     updatePlayers();
 
-    checkBankruptcy();
-    finishRoll();
+    if (checkBankruptcy(playerIndex)) return;
+    finishRoll(playerIndex, actionTurnId);
 }
 
-function receiveBonus() {
-    const player = players[currentPlayer];
+function receiveBonus(playerIndex, actionTurnId) {
+    const player = players[playerIndex];
+    player.money += BONUS_AMOUNT;
 
-    const amount = 150;
-
-    player.money += amount;
-
-    showMessage(
-        `🎁 Bonus : tu reçois ${amount} €.`
-    );
-
-    log(
-        `🎁 ${player.name} reçoit ${amount} €.`
-    );
-
+    showMessage(`🎁 Bonus : tu reçois ${formatMoney(BONUS_AMOUNT)}.`);
+    log(`🎁 ${player.name} reçoit ${formatMoney(BONUS_AMOUNT)}.`);
     updateMoney();
     updatePlayers();
-
-    finishRoll();
+    finishRoll(playerIndex, actionTurnId);
 }
 
-function drawChance() {
-    const player = players[currentPlayer];
+function drawChance(playerIndex, actionTurnId) {
+    if (!isActiveTurn(playerIndex, actionTurnId)) return;
 
+    const player = players[playerIndex];
     const cards = [
         {
             text: "💰 Tu gagnes 100 €.",
-            action: () => {
+            resolve: () => {
                 player.money += 100;
+                finishChance(playerIndex, actionTurnId);
             }
         },
         {
             text: "🎁 Bonus exceptionnel : +150 €.",
-            action: () => {
-                player.money += 150;
+            resolve: () => {
+                player.money += BONUS_AMOUNT;
+                finishChance(playerIndex, actionTurnId);
             }
         },
         {
             text: "🚗 Avance de 3 cases.",
-            action: () => {
-                movePlayer(3);
-            }
+            resolve: () => movePlayer(
+                3,
+                playerIndex,
+                actionTurnId,
+                () => resolveCell(playerIndex, actionTurnId)
+            )
         },
         {
             text: "↩️ Recule de 2 cases.",
-            action: () => {
+            resolve: () => {
                 player.position =
-                    (player.position - 2 + cellsData.length)
-                    % cellsData.length;
-
+                    (player.position - 2 + cellsData.length) %
+                    cellsData.length;
                 updateBoard();
-                resolveCell();
+                updatePlayers();
+                setTimeout(
+                    () => resolveCell(playerIndex, actionTurnId),
+                    350
+                );
             }
         },
         {
             text: "🏦 Tu récupères 75 €.",
-            action: () => {
+            resolve: () => {
                 player.money += 75;
+                finishChance(playerIndex, actionTurnId);
             }
         }
     ];
 
-    const card =
-        cards[Math.floor(Math.random() * cards.length)];
-
+    const card = cards[Math.floor(Math.random() * cards.length)];
     showMessage(card.text);
-
     log(`🎲 Chance : ${card.text}`);
+    card.resolve();
+}
 
-    card.action();
-
+function finishChance(playerIndex, actionTurnId) {
     updateMoney();
     updatePlayers();
-
-    if (!gameOver) {
-        finishRoll();
-    }
+    if (checkBankruptcy(playerIndex)) return;
+    finishRoll(playerIndex, actionTurnId);
 }
 
-function checkBankruptcy() {
-    players.forEach((player, index) => {
-        if (player.money < 0) {
-            gameOver = true;
+function checkBankruptcy(playerIndex) {
+    const player = players[playerIndex];
+    if (player.money >= 0) return false;
 
-            const winner =
-                players[index === 0 ? 1 : 0];
-
-            showMessage(
-                `🏆 ${winner.name} gagne ! ${player.name} est en faillite.`
-            );
-
-            log(
-                `🏆 ${winner.name} remporte la partie !`
-            );
-
-            if (rollButton) {
-                rollButton.disabled = true;
-            }
-
-            if (endTurnButton) {
-                endTurnButton.disabled = true;
-            }
-        }
-    });
-}
-
-function finishRoll() {
-    if (gameOver) return;
-
+    player.bankrupt = true;
+    gameOver = true;
     rolling = false;
 
-    if (rollButton) {
-        rollButton.disabled = false;
+    const winner = players.find(
+        (candidate, index) =>
+            index !== playerIndex && !candidate.bankrupt
+    );
+
+    if (winner) {
+        showMessage(
+            `🏆 ${winner.name} gagne ! ` +
+            `${player.name} est en faillite.`
+        );
+        log(`🏆 ${winner.name} remporte la partie !`);
+    } else {
+        showMessage("🏁 La partie est terminée.");
+        log("🏁 La partie est terminée.");
     }
 
-    if (endTurnButton) {
-        endTurnButton.disabled = false;
-    }
+    if (rollButton) rollButton.disabled = true;
+    if (endTurnButton) endTurnButton.disabled = true;
+    updateAction();
+    updatePlayers();
+    updateBoard();
+    showGameOver(winner ? `${winner.name} remporte FortuneCity !` : "Partie terminée");
+    return true;
+}
 
+function finishRoll(playerIndex, actionTurnId) {
+    if (!isActiveTurn(playerIndex, actionTurnId)) return;
+
+    rolling = false;
+    if (rollButton) rollButton.disabled = false;
+    if (endTurnButton) endTurnButton.disabled = false;
     updateMoney();
     updatePlayers();
 }
@@ -618,51 +593,59 @@ function finishRoll() {
 function endTurn() {
     if (rolling || gameOver) return;
 
-    currentPlayer =
-        (currentPlayer + 1) % players.length;
+    turnId += 1;
+    let nextPlayer = (currentPlayer + 1) % players.length;
+    while (players[nextPlayer].bankrupt && nextPlayer !== currentPlayer) {
+        nextPlayer = (nextPlayer + 1) % players.length;
+    }
 
-    showMessage(
-        `🎮 À ${players[currentPlayer].name} de jouer !`
-    );
-
-    log(
-        `🎮 Tour de ${players[currentPlayer].name}.`
-    );
-
+    currentPlayer = nextPlayer;
+    showMessage(`🎮 À ${players[currentPlayer].name} de jouer !`);
+    log(`🎮 Tour de ${players[currentPlayer].name}.`);
+    updateBoard();
     updateMoney();
     updatePlayers();
 
-    if (rollButton) {
-        rollButton.disabled = false;
-    }
+    if (rollButton) rollButton.disabled = false;
+    if (endTurnButton) endTurnButton.disabled = true;
+}
 
-    if (endTurnButton) {
-        endTurnButton.disabled = true;
+function showGameOver(text) {
+    if (!modal || !modalContent) return;
+
+    modalContent.textContent = text;
+    modal.classList.remove("hidden");
+}
+
+function hideModal() {
+    if (modal) {
+        modal.classList.add("hidden");
     }
 }
 
 function resetGame() {
+    turnId += 1;
     players.forEach(player => {
         player.money = START_MONEY;
         player.position = 0;
         player.properties = [];
+        player.bankrupt = false;
     });
 
     currentPlayer = 0;
     rolling = false;
     gameOver = false;
-
+    updateAction();
+    hideModal();
     updateBoard();
     updateMoney();
     updatePlayers();
-
     showMessage("🎮 FortuneCity démarre !");
-
     log("🎮 Nouvelle partie FortuneCity.");
 
-    if (rollButton) {
-        rollButton.disabled = false;
-    }
+    if (diceElement) diceElement.textContent = "🎲 🎲";
+    if (rollButton) rollButton.disabled = false;
+    if (endTurnButton) endTurnButton.disabled = true;
 }
 
 if (rollButton) {
@@ -673,12 +656,18 @@ if (endTurnButton) {
     endTurnButton.addEventListener("click", endTurn);
 }
 
-createBoard();
-updateBoard();
-updateMoney();
-updatePlayers();
+if (newGameButton) {
+    newGameButton.addEventListener("click", resetGame);
+}
 
-showMessage("🎮 À toi de jouer !");
+if (closeModalButton) {
+    closeModalButton.addEventListener("click", hideModal);
+}
 
-log("🎮 FortuneCity démarre !");
-log("💰 Chaque joueur commence avec 1 500 €.");
+if (modal) {
+    modal.addEventListener("click", event => {
+        if (event.target === modal) hideModal();
+    });
+}
+
+resetGame();

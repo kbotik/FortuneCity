@@ -97,6 +97,13 @@ main {
   font-size: 13px;
 }
 
+.player-properties {
+  margin-top: 5px;
+  color: #cbd5e1;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
 #game {
   padding: 10px 14px 30px;
 }
@@ -164,7 +171,8 @@ main {
   margin-bottom: 3px;
 }
 
-.token {
+.token,
+.player-token {
   position: absolute;
   right: 3px;
   bottom: 3px;
@@ -173,11 +181,13 @@ main {
   z-index: 30;
 }
 
-.token.two {
+.token.two,
+.player-token.player-1 {
   right: 30px;
 }
 
-.token.three {
+.token.three,
+.player-token.player-2 {
   right: 55px;
 }
 
@@ -192,6 +202,7 @@ main {
 
 .main-button,
 .secondary-button,
+.tertiary-button,
 .action button,
 #closeModal {
   border: 0;
@@ -229,6 +240,14 @@ main {
 
 .secondary-button:disabled {
   opacity: .35;
+}
+
+.tertiary-button {
+  width: 100%;
+  margin-top: 10px;
+  background: #e2e8f0;
+  color: #172033;
+  font-size: 16px;
 }
 
 .dice-result {
@@ -313,6 +332,11 @@ main {
 
 .modal-box h2 {
   margin-top: 0;
+}
+
+.modal-box #modalContent {
+  font-size: 20px;
+  font-weight: 800;
 }
 
 #closeModal {
