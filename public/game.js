@@ -584,6 +584,7 @@ function finishRoll(playerIndex, actionTurnId) {
     if (!isActiveTurn(playerIndex, actionTurnId)) return;
 
     rolling = false;
+    updateAction();
     if (rollButton) rollButton.disabled = false;
     if (endTurnButton) endTurnButton.disabled = false;
     updateMoney();
@@ -600,6 +601,7 @@ function endTurn() {
     }
 
     currentPlayer = nextPlayer;
+    updateAction();
     showMessage(`🎮 À ${players[currentPlayer].name} de jouer !`);
     log(`🎮 Tour de ${players[currentPlayer].name}.`);
     updateBoard();
