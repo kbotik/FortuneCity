@@ -602,6 +602,7 @@ function endTurn() {
 
     currentPlayer = nextPlayer;
     updateAction();
+    if (diceElement) diceElement.textContent = "🎲 🎲";
     showMessage(`🎮 À ${players[currentPlayer].name} de jouer !`);
     log(`🎮 Tour de ${players[currentPlayer].name}.`);
     updateBoard();
