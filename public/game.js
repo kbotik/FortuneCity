@@ -19,6 +19,9 @@ const PASS_START_BONUS = 200;
 const BONUS_AMOUNT = 150;
 const MOVE_STEP_DELAY = 180;
 const MOVE_RESOLVE_DELAY = 350;
+const DICE_ANIMATION_INTERVAL = 90;
+const DICE_ANIMATION_STEPS = 5;
+const DICE_FACES = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
 const PLAYER_COLORS = ["#2563eb", "#db2777", "#16a34a", "#ea580c"];
 const PLAYER_TOKEN_STYLES = [
     {
@@ -59,6 +62,7 @@ let rolling = false;
 let movementInProgress = false;
 let gameOver = false;
 let turnId = 0;
+let diceAnimationTimer = null;
 
 const cellsData = [
     {type: "start", name: "DÉPART", icon: "🚩"},
@@ -354,6 +358,55 @@ function isActiveTurn(playerIndex, actionTurnId) {
     );
 }
 
+function clearDiceAnimation() {
+    if (diceAnimationTimer !== null) {
+        clearTimeout(diceAnimationTimer);
+        diceAnimationTimer = null;
+    }
+}
+
+function animateDice(
+    playerIndex,
+    actionTurnId,
+    die1,
+    die2,
+    onComplete
+) {
+    let animationStep = 0;
+
+    const animateFrame = () => {
+        if (!isActiveTurn(playerIndex, actionTurnId) || !rolling) {
+            clearDiceAnimation();
+            return;
+        }
+
+        if (animationStep >= DICE_ANIMATION_STEPS) {
+            diceAnimationTimer = null;
+            if (diceElement) {
+                diceElement.textContent =
+                    `${die1} + ${die2} = ${die1 + die2}`;
+            }
+            onComplete();
+            return;
+        }
+
+        if (diceElement) {
+            diceElement.textContent =
+                `${DICE_FACES[rollDie() - 1]} ` +
+                `${DICE_FACES[rollDie() - 1]}`;
+        }
+
+        animationStep += 1;
+        diceAnimationTimer = setTimeout(
+            animateFrame,
+            DICE_ANIMATION_INTERVAL
+        );
+    };
+
+    clearDiceAnimation();
+    animateFrame();
+}
+
 function rollDice() {
     if (rolling || movementInProgress || gameOver) return;
 
@@ -376,20 +429,32 @@ function rollDice() {
     }
     updateAction();
 
-    if (diceElement) {
-        diceElement.textContent = `${die1} + ${die2} = ${total}`;
-    }
+    showMessage(`${player.emoji} ${player.name} lance les dés...`);
 
-    showMessage(
-        `${player.emoji} ${player.name} lance ${die1} + ${die2} = ${total}`
-    );
-    log(`🎲 ${player.name} lance ${die1} + ${die2} = ${total}.`);
-
-    movePlayer(
-        total,
+    animateDice(
         playerIndex,
         actionTurnId,
-        () => resolveCell(playerIndex, actionTurnId)
+        die1,
+        die2,
+        () => {
+            if (!isActiveTurn(playerIndex, actionTurnId)) return;
+
+            showMessage(
+                `${player.emoji} ${player.name} lance ` +
+                `${die1} + ${die2} = ${total}`
+            );
+            log(
+                `🎲 ${player.name} lance ` +
+                `${die1} + ${die2} = ${total}.`
+            );
+
+            movePlayer(
+                total,
+                playerIndex,
+                actionTurnId,
+                () => resolveCell(playerIndex, actionTurnId)
+            );
+        }
     );
 }
 
@@ -800,6 +865,7 @@ function hideModal() {
 }
 
 function resetGame() {
+    clearDiceAnimation();
     turnId += 1;
     players.forEach(player => {
         player.money = START_MONEY;
