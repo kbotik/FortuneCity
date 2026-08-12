@@ -1609,7 +1609,9 @@ class OnlineClient {
             if (this.socket !== socket) return;
             this.reconnectAttempt = 0;
             this.connectionState = "CONNECTED";
-            this.controls.reconnectButton.style.display = "none";
+            if (this.controls && this.controls.reconnectButton) {
+                this.controls.reconnectButton.style.display = "none";
+            }
             this.setStatus("Connecté au serveur.");
             const pendingMessages = this.pendingMessages.splice(0);
             pendingMessages.forEach(message => this.sendNow(
@@ -1625,7 +1627,9 @@ class OnlineClient {
         socket.addEventListener("close", () => {
             if (this.socket !== socket) return;
             this.connectionState = "DISCONNECTED";
-            this.controls.reconnectButton.style.display = "block";
+            if (this.controls && this.controls.reconnectButton) {
+                this.controls.reconnectButton.style.display = "block";
+            }
             this.setStatus(
                 this.modeActive
                     ? "Connexion perdue. Reconnexion..."
@@ -1934,18 +1938,30 @@ class OnlineClient {
         this.controls.roomCodeDisplay.textContent =
             roomState.code || "En attente du code de salle";
         const hasRoom = Boolean(roomState.code);
-        this.controls.shareRow.style.display = "flex";
-        this.controls.copyCodeButton.disabled = !hasRoom;
-        this.controls.shareButton.disabled = !hasRoom;
-        this.controls.leaveButton.disabled = !hasRoom;
+        if (this.controls.shareRow) {
+            this.controls.shareRow.style.display = "flex";
+        }
+        if (this.controls.copyCodeButton) {
+            this.controls.copyCodeButton.disabled = !hasRoom;
+        }
+        if (this.controls.shareButton) {
+            this.controls.shareButton.disabled = !hasRoom;
+        }
+        if (this.controls.leaveButton) {
+            this.controls.leaveButton.disabled = !hasRoom;
+        }
         this.controls.playerCount.textContent =
             `${roomState.players.length} / 4 joueurs`;
-        this.controls.leaveButton.style.display =
-            roomState.code ? "block" : "none";
-        this.controls.reconnectButton.style.display =
-            this.connectionState === "CONNECTED"
-                ? "none"
-                : "block";
+        if (this.controls.leaveButton) {
+            this.controls.leaveButton.style.display =
+                roomState.code ? "block" : "none";
+        }
+        if (this.controls.reconnectButton) {
+            this.controls.reconnectButton.style.display =
+                this.connectionState === "CONNECTED"
+                    ? "none"
+                    : "block";
+        }
         this.controls.playersLabel.textContent =
             roomState.players
                 .map((player, index) =>
