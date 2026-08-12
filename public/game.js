@@ -123,6 +123,7 @@ const gameState = {
 
 let historySequence = 0;
 let diceAnimationTimer = null;
+let onlineClient = null;
 
 function formatMoney(amount) {
     return `${amount.toLocaleString("fr-FR")} €`;
@@ -283,7 +284,8 @@ function createBoard() {
         element.className = `cell cell-${cell.type}`;
         element.dataset.position = index;
 
-        if (gameState.players[gameState.currentPlayer].position === index) {
+        const activePlayer = gameState.players[gameState.currentPlayer];
+        if (activePlayer && activePlayer.position === index) {
             element.classList.add("active");
         }
 
@@ -1259,6 +1261,439 @@ function importGameState(snapshot) {
     return true;
 }
 
+function createOnlinePanel(client) {
+    const gameSection = document.getElementById("game");
+    if (!gameSection) return null;
+
+    const panel = document.createElement("section");
+    const title = document.createElement("strong");
+    const status = document.createElement("div");
+    const nameInput = document.createElement("input");
+    const roomInput = document.createElement("input");
+    const createButton = document.createElement("button");
+    const joinButton = document.createElement("button");
+    const readyButton = document.createElement("button");
+    const startButton = document.createElement("button");
+    const roomLabel = document.createElement("div");
+    const playersLabel = document.createElement("div");
+
+    panel.className = "online-panel";
+    Object.assign(panel.style, {
+        background: "#172944",
+        borderRadius: "18px",
+        color: "#ffffff",
+        marginBottom: "16px",
+        padding: "14px"
+    });
+
+    title.textContent = "🌐 FortuneCity en ligne";
+    title.style.display = "block";
+    title.style.marginBottom = "8px";
+
+    status.textContent = "Connexion au serveur...";
+    status.style.marginBottom = "8px";
+
+    nameInput.placeholder = "Pseudo";
+    nameInput.value = "Joueur";
+    nameInput.maxLength = 24;
+    roomInput.placeholder = "Code de salle";
+    roomInput.maxLength = 6;
+
+    [nameInput, roomInput].forEach(input => {
+        Object.assign(input.style, {
+            border: "0",
+            borderRadius: "10px",
+            margin: "3px",
+            padding: "9px",
+            width: "calc(50% - 10px)"
+        });
+    });
+
+    createButton.textContent = "Créer une salle";
+    joinButton.textContent = "Rejoindre";
+    readyButton.textContent = "Prêt";
+    startButton.textContent = "Lancer la partie";
+    [createButton, joinButton, readyButton, startButton].forEach(button => {
+        Object.assign(button.style, {
+            border: "0",
+            borderRadius: "10px",
+            cursor: "pointer",
+            margin: "3px",
+            padding: "9px 12px"
+        });
+    });
+
+    roomLabel.style.marginTop = "8px";
+    playersLabel.style.fontSize = "13px";
+    playersLabel.style.marginTop = "6px";
+    playersLabel.style.whiteSpace = "pre-line";
+
+    panel.append(
+        title,
+        status,
+        nameInput,
+        roomInput,
+        document.createElement("br"),
+        createButton,
+        joinButton,
+        readyButton,
+        startButton,
+        roomLabel,
+        playersLabel
+    );
+    gameSection.prepend(panel);
+
+    const controls = {
+        panel,
+        status,
+        nameInput,
+        roomInput,
+        createButton,
+        joinButton,
+        readyButton,
+        startButton,
+        roomLabel,
+        playersLabel
+    };
+
+    createButton.addEventListener(
+        "click",
+        () => client.createRoom(nameInput.value)
+    );
+    joinButton.addEventListener(
+        "click",
+        () => client.joinRoom(roomInput.value, nameInput.value)
+    );
+    readyButton.addEventListener(
+        "click",
+        () => client.send("PLAYER_READY", {
+            ready: !client.localReady
+        })
+    );
+    startButton.addEventListener(
+        "click",
+        () => client.send("START_GAME")
+    );
+
+    return controls;
+}
+
+function applyOnlineRoomState(roomState) {
+    if (!onlineClient || !roomState) return;
+
+    gameState.players = roomState.players.map(player => ({
+        id: player.id,
+        name: player.name,
+        emoji: player.emoji,
+        money: player.money,
+        position: player.position,
+        properties: [...player.properties],
+        inPrison: Boolean(player.inPrison),
+        bankrupt: Boolean(player.bankrupt),
+        connected: Boolean(player.connected),
+        ready: Boolean(player.ready)
+    }));
+    gameState.currentPlayer = Math.max(
+        0,
+        gameState.players.findIndex(
+            player => player.id === roomState.currentPlayerId
+        )
+    );
+    gameState.rolling = Boolean(roomState.movementInProgress);
+    gameState.movementInProgress =
+        Boolean(roomState.movementInProgress) ||
+        roomState.pendingPropertyIndex !== null;
+    gameState.gameOver = roomState.status === "FINISHED";
+    gameState.winnerIndex = gameState.players.findIndex(
+        player => player.id === roomState.winnerId
+    );
+    if (gameState.winnerIndex === -1) gameState.winnerIndex = null;
+    gameState.lastDice = roomState.lastDice
+        ? {...roomState.lastDice}
+        : null;
+    gameState.history = Array.isArray(roomState.history)
+        ? roomState.history.map(normalizeHistoryEntry).filter(Boolean)
+        : [];
+
+    updateBoard();
+    updateMoney();
+    updatePlayers();
+    renderHistory();
+    onlineClient.renderRoom(roomState);
+    onlineClient.renderPendingAction(roomState);
+
+    if (diceElement) {
+        diceElement.textContent = gameState.lastDice
+            ? `${gameState.lastDice.dice1 || gameState.lastDice.die1} + ` +
+              `${gameState.lastDice.dice2 || gameState.lastDice.die2} = ` +
+              `${gameState.lastDice.total}`
+            : "🎲 🎲";
+    }
+}
+
+class OnlineClient {
+    constructor() {
+        this.socket = null;
+        this.roomCode = null;
+        this.playerId = null;
+        this.reconnectToken = null;
+        this.localReady = false;
+        this.roomState = null;
+        this.controls = createOnlinePanel(this);
+        this.wsUrl = this.getWebSocketUrl();
+        this.connect();
+    }
+
+    getWebSocketUrl() {
+        const params = new URLSearchParams(window.location.search);
+        const configured = params.get("ws");
+        if (configured) return configured;
+
+        const protocol = window.location.protocol === "https:"
+            ? "wss:"
+            : "ws:";
+        const port = window.location.port
+            ? `:${window.location.port}`
+            : ":8080";
+        return `${protocol}//${window.location.hostname}${port}`;
+    }
+
+    connect() {
+        if (!this.wsUrl || typeof WebSocket === "undefined") {
+            this.setStatus("WebSocket indisponible : mode local actif.");
+            return;
+        }
+
+        try {
+            this.socket = new WebSocket(this.wsUrl);
+        } catch (error) {
+            this.setStatus("Connexion online impossible : mode local actif.");
+            return;
+        }
+
+        this.socket.addEventListener("open", () => {
+            this.setStatus("Connecté au serveur.");
+            this.tryReconnect();
+        });
+        this.socket.addEventListener(
+            "message",
+            event => this.handleMessage(event.data)
+        );
+        this.socket.addEventListener("close", () => {
+            this.setStatus(
+                "Serveur déconnecté. Le mode local reste disponible."
+            );
+        });
+        this.socket.addEventListener("error", () => {
+            this.setStatus("Erreur de connexion au serveur.");
+        });
+    }
+
+    tryReconnect() {
+        const saved = sessionStorage.getItem("fortunecity-online");
+        if (!saved) return;
+
+        try {
+            const session = JSON.parse(saved);
+            if (session.roomCode && session.playerId && session.reconnectToken) {
+                this.send("JOIN_ROOM", {
+                    roomCode: session.roomCode,
+                    playerId: session.playerId,
+                    reconnectToken: session.reconnectToken,
+                    name: session.name || "Joueur"
+                });
+            }
+        } catch (error) {
+            sessionStorage.removeItem("fortunecity-online");
+        }
+    }
+
+    send(type, payload = {}) {
+        if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+            this.setStatus("Serveur indisponible.");
+            return false;
+        }
+
+        this.socket.send(JSON.stringify({type, payload}));
+        return true;
+    }
+
+    createRoom(name) {
+        this.send("CREATE_ROOM", {name});
+    }
+
+    joinRoom(roomCode, name) {
+        this.send("JOIN_ROOM", {
+            roomCode: roomCode.toUpperCase(),
+            name
+        });
+    }
+
+    roll() {
+        this.send("ROLL_DICE");
+    }
+
+    endTurn() {
+        this.send("END_TURN");
+    }
+
+    buy(propertyIndex) {
+        this.send("BUY_PROPERTY", {propertyIndex});
+    }
+
+    decline() {
+        this.send("DECLINE_PROPERTY");
+    }
+
+    saveSession(payload) {
+        this.roomCode = payload.roomCode || this.roomCode;
+        this.playerId = payload.playerId || this.playerId;
+        this.reconnectToken =
+            payload.reconnectToken || this.reconnectToken;
+        sessionStorage.setItem(
+            "fortunecity-online",
+            JSON.stringify({
+                roomCode: this.roomCode,
+                playerId: this.playerId,
+                reconnectToken: this.reconnectToken,
+                name: this.controls.nameInput.value
+            })
+        );
+    }
+
+    handleMessage(rawMessage) {
+        let message;
+        try {
+            message = JSON.parse(rawMessage);
+        } catch (error) {
+            this.setStatus("Réponse serveur invalide.");
+            return;
+        }
+
+        if (message.state) {
+            this.roomState = message.state;
+            applyOnlineRoomState(message.state);
+        }
+
+        const payload = message.payload || {};
+        if (message.type === "ROOM_CREATED") {
+            this.saveSession(payload);
+            this.controls.roomInput.value = payload.roomCode;
+            this.setStatus(`Salle créée : ${payload.roomCode}`);
+        } else if (message.type === "ROOM_JOINED") {
+            this.saveSession(payload);
+            this.setStatus(
+                payload.reconnected
+                    ? "Joueur reconnecté."
+                    : "Salle rejointe."
+            );
+        } else if (message.type === "ERROR") {
+            this.setStatus(payload.message || "Action refusée.");
+            showMessage(payload.message || "Action refusée.");
+        } else if (message.type === "DICE_RESULT") {
+            showMessage(
+                `🎲 Résultat serveur : ${payload.dice1} + ` +
+                `${payload.dice2} = ${payload.total}`
+            );
+        } else if (message.type === "PLAYER_DISCONNECTED") {
+            showMessage(`🔴 ${payload.playerName} est déconnecté.`);
+        } else if (message.type === "PLAYER_RECONNECTED") {
+            showMessage(`🟢 Un joueur s'est reconnecté.`);
+        } else if (message.type === "GAME_OVER") {
+            showMessage(
+                payload.winnerName
+                    ? `🏆 ${payload.winnerName} gagne !`
+                    : "🏁 Partie terminée."
+            );
+        }
+    }
+
+    setStatus(text) {
+        if (this.controls) this.controls.status.textContent = text;
+    }
+
+    renderRoom(roomState) {
+        if (!this.controls) return;
+
+        this.controls.roomLabel.textContent =
+            roomState.code
+                ? `Salle : ${roomState.code} — ${roomState.status}`
+                : "";
+        this.controls.playersLabel.textContent =
+            roomState.players
+                .map(player =>
+                    `${player.connected ? "🟢" : "⚪"} ${player.name}` +
+                    `${player.id === roomState.hostId ? " — Hôte" : ""}` +
+                    `${player.ready ? " — Prêt" : ""}`
+                )
+                .join("\n");
+
+        const localPlayer = roomState.players.find(
+            player => player.id === this.playerId
+        );
+        this.localReady = Boolean(localPlayer && localPlayer.ready);
+        this.controls.readyButton.textContent =
+            this.localReady ? "Pas prêt" : "Prêt";
+        this.controls.startButton.disabled =
+            roomState.hostId !== this.playerId ||
+            roomState.players.length < 2 ||
+            roomState.status === "PLAYING" ||
+            roomState.status === "FINISHED";
+        this.controls.readyButton.disabled =
+            roomState.status === "PLAYING" ||
+            roomState.status === "FINISHED";
+    }
+
+    renderPendingAction(roomState) {
+        updateAction();
+        if (
+            roomState.status !== "PLAYING" ||
+            roomState.pendingPropertyIndex === null ||
+            roomState.currentPlayerId !== this.playerId
+        ) {
+            this.updateOnlineButtons(roomState);
+            return;
+        }
+
+        const cell = cellsData[roomState.pendingPropertyIndex];
+        if (!cell || cell.type !== "property") {
+            this.updateOnlineButtons(roomState);
+            return;
+        }
+
+        showMessage(`${cell.name} est libre : ${formatMoney(cell.price)}`);
+        addActionButton(
+            `🏠 Acheter pour ${formatMoney(cell.price)}`,
+            "buy-button",
+            () => this.buy(roomState.pendingPropertyIndex)
+        );
+        addActionButton(
+            "⏭️ Ne pas acheter",
+            "skip-button",
+            () => this.decline()
+        );
+        this.updateOnlineButtons(roomState);
+    }
+
+    updateOnlineButtons(roomState) {
+        const myTurn = roomState.currentPlayerId === this.playerId;
+        const canRoll =
+            roomState.status === "PLAYING" &&
+            myTurn &&
+            !roomState.movementInProgress &&
+            roomState.pendingPropertyIndex === null;
+        const canEnd =
+            roomState.status === "PLAYING" &&
+            myTurn &&
+            !roomState.movementInProgress &&
+            roomState.pendingPropertyIndex === null;
+
+        if (rollButton) rollButton.disabled = !canRoll;
+        if (endTurnButton) endTurnButton.disabled = !canEnd;
+        if (newGameButton) newGameButton.disabled = true;
+    }
+}
+
 function applyPlayerAction(
     playerIndex,
     actionType,
@@ -1305,22 +1740,32 @@ if (typeof window !== "undefined") {
 if (rollButton) {
     rollButton.addEventListener(
         "click",
-        () => applyPlayerAction(gameState.currentPlayer, "roll")
+        () => onlineClient
+            ? onlineClient.roll()
+            : applyPlayerAction(gameState.currentPlayer, "roll")
     );
 }
 
 if (endTurnButton) {
     endTurnButton.addEventListener(
         "click",
-        () => applyPlayerAction(
-            gameState.currentPlayer,
-            "endTurn"
-        )
+        () => onlineClient
+            ? onlineClient.endTurn()
+            : applyPlayerAction(gameState.currentPlayer, "endTurn")
     );
 }
 
 if (newGameButton) {
-    newGameButton.addEventListener("click", resetGame);
+    newGameButton.addEventListener("click", () => {
+        if (onlineClient) {
+            onlineClient.setStatus(
+                "En mode online, seule une nouvelle salle " +
+                "réinitialise la partie."
+            );
+            return;
+        }
+        resetGame();
+    });
 }
 
 if (closeModalButton) {
@@ -1334,3 +1779,11 @@ if (modal) {
 }
 
 resetGame();
+
+if (
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("mode") === "online"
+) {
+    onlineClient = new OnlineClient();
+    window.FortuneCityOnline = onlineClient;
+}
