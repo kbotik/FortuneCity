@@ -152,6 +152,13 @@ main {
   color: #e2e8f0;
 }
 
+.online-reconnect-button {
+  width: 100%;
+  margin-top: 8px;
+  background: #f59e0b !important;
+  color: #172033 !important;
+}
+
 .online-room-code {
   margin: 10px 0;
   padding: 12px;

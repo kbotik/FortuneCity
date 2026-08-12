@@ -1331,6 +1331,7 @@ function createOnlinePanel(client) {
     const shareButton = document.createElement("button");
     const playerCount = document.createElement("div");
     const leaveButton = document.createElement("button");
+    const reconnectButton = document.createElement("button");
     const playersLabel = document.createElement("div");
 
     panel.className = "online-panel";
@@ -1370,6 +1371,8 @@ function createOnlinePanel(client) {
     readyButton.textContent = "✅ Je suis prêt";
     startButton.textContent = "🎮 Lancer la partie";
     leaveButton.textContent = "🚪 Quitter la salle";
+    reconnectButton.className = "online-reconnect-button";
+    reconnectButton.textContent = "🔄 Reconnexion";
     [
         createButton,
         joinButton,
@@ -1397,6 +1400,7 @@ function createOnlinePanel(client) {
     copyCodeButton.disabled = true;
     shareButton.disabled = true;
     leaveButton.disabled = true;
+    reconnectButton.style.display = "none";
     playersLabel.style.fontSize = "13px";
     playersLabel.style.marginTop = "6px";
     playersLabel.style.whiteSpace = "pre-line";
@@ -1416,6 +1420,7 @@ function createOnlinePanel(client) {
         shareRow,
         playerCount,
         leaveButton,
+        reconnectButton,
         playersLabel
     );
     gameSection.prepend(panel);
@@ -1435,6 +1440,7 @@ function createOnlinePanel(client) {
         shareButton,
         playerCount,
         leaveButton,
+        reconnectButton,
         playersLabel
     };
 
@@ -1467,6 +1473,10 @@ function createOnlinePanel(client) {
     leaveButton.addEventListener(
         "click",
         () => client.leaveRoom()
+    );
+    reconnectButton.addEventListener(
+        "click",
+        () => client.manualReconnect()
     );
 
     return controls;
@@ -1534,6 +1544,7 @@ class OnlineClient {
         this.localReady = false;
         this.roomState = null;
         this.modeActive = false;
+        this.connectionState = "DISCONNECTED";
         this.reconnectTimer = null;
         this.reconnectAttempt = 0;
         this.pendingMessages = [];
@@ -1544,33 +1555,61 @@ class OnlineClient {
 
     getWebSocketUrl() {
         const params = new URLSearchParams(window.location.search);
-        const configured = params.get("ws");
-        if (configured) return configured;
+        const meta = document.querySelector(
+            'meta[name="FORTUNECITY_WS_URL"]'
+        );
+        const configured =
+            window.FORTUNECITY_WS_URL ||
+            (meta && meta.content) ||
+            params.get("ws");
 
-        const protocol = window.location.protocol === "https:"
-            ? "wss:"
-            : "ws:";
-        const port = window.location.port
-            ? `:${window.location.port}`
-            : ":8080";
-        return `${protocol}//${window.location.hostname}${port}`;
+        return configured ? configured.trim() : "";
     }
 
     connect() {
+        if (
+            this.socket &&
+            (
+                this.socket.readyState === WebSocket.CONNECTING ||
+                this.socket.readyState === WebSocket.OPEN
+            )
+        ) {
+            return;
+        }
+
         if (!this.wsUrl || typeof WebSocket === "undefined") {
-            this.setStatus("WebSocket indisponible : mode local actif.");
+            this.connectionState = "DISCONNECTED";
+            this.setStatus(
+                "URL du serveur non configurée : mode local actif."
+            );
+            return;
+        }
+
+        if (
+            window.location.protocol === "https:" &&
+            !this.wsUrl.startsWith("wss://")
+        ) {
+            this.connectionState = "DISCONNECTED";
+            this.setStatus("Une URL wss:// est requise en production.");
             return;
         }
 
         try {
             this.socket = new WebSocket(this.wsUrl);
         } catch (error) {
+            this.connectionState = "DISCONNECTED";
             this.setStatus("Connexion online impossible : mode local actif.");
             return;
         }
 
-        this.socket.addEventListener("open", () => {
+        const socket = this.socket;
+        this.connectionState = "CONNECTING";
+        this.setStatus("Connexion...");
+        socket.addEventListener("open", () => {
+            if (this.socket !== socket) return;
             this.reconnectAttempt = 0;
+            this.connectionState = "CONNECTED";
+            this.controls.reconnectButton.style.display = "none";
             this.setStatus("Connecté au serveur.");
             const pendingMessages = this.pendingMessages.splice(0);
             pendingMessages.forEach(message => this.sendNow(
@@ -1579,11 +1618,14 @@ class OnlineClient {
             ));
             this.tryReconnect();
         });
-        this.socket.addEventListener(
+        socket.addEventListener(
             "message",
             event => this.handleMessage(event.data)
         );
-        this.socket.addEventListener("close", () => {
+        socket.addEventListener("close", () => {
+            if (this.socket !== socket) return;
+            this.connectionState = "DISCONNECTED";
+            this.controls.reconnectButton.style.display = "block";
             this.setStatus(
                 this.modeActive
                     ? "Connexion perdue. Reconnexion..."
@@ -1598,7 +1640,9 @@ class OnlineClient {
                 this.scheduleReconnect();
             }
         });
-        this.socket.addEventListener("error", () => {
+        socket.addEventListener("error", () => {
+            if (this.socket !== socket) return;
+            this.connectionState = "DISCONNECTED";
             this.setStatus(
                 this.modeActive
                     ? "Connexion perdue. Reconnexion..."
@@ -1622,6 +1666,24 @@ class OnlineClient {
         }, delay);
     }
 
+    manualReconnect() {
+        if (!this.wsUrl) {
+            this.setStatus("URL du serveur non configurée.");
+            return;
+        }
+
+        if (
+            this.socket &&
+            this.socket.readyState === WebSocket.OPEN
+        ) {
+            return;
+        }
+
+        this.reconnectAttempt = 0;
+        this.setStatus("Reconnexion...");
+        this.connect();
+    }
+
     tryReconnect() {
         const saved = sessionStorage.getItem("fortunecity-online");
         if (!saved) return;
@@ -1642,6 +1704,13 @@ class OnlineClient {
     }
 
     send(type, payload = {}) {
+        if (!this.wsUrl) {
+            this.setStatus(
+                "Connexion au serveur impossible : mode local disponible."
+            );
+            return false;
+        }
+
         if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
             this.pendingMessages.push({type, payload});
             this.setStatus("Connexion au serveur...");
@@ -1873,6 +1942,10 @@ class OnlineClient {
             `${roomState.players.length} / 4 joueurs`;
         this.controls.leaveButton.style.display =
             roomState.code ? "block" : "none";
+        this.controls.reconnectButton.style.display =
+            this.connectionState === "CONNECTED"
+                ? "none"
+                : "block";
         this.controls.playersLabel.textContent =
             roomState.players
                 .map((player, index) =>
