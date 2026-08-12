@@ -500,15 +500,22 @@ function handleProperty(cell, playerIndex, actionTurnId) {
 
     const owner = players[ownerIndex];
     const rent = Math.max(25, Math.floor(cell.price * 0.25));
+    const playerBalanceBefore = player.money;
+    const ownerBalanceBefore = owner.money;
 
     player.money -= rent;
     owner.money += rent;
 
     showMessage(
-        `💸 ${player.name} paie ${formatMoney(rent)} de loyer ` +
-        `à ${owner.name}.`
+        `💸 ${player.name} paie ${formatMoney(rent)} à ${owner.name}. ` +
+        `Solde : ${formatMoney(player.money)}.`
     );
-    log(`🏠 ${player.name} paie ${formatMoney(rent)} à ${owner.name}.`);
+    log(
+        `💸 ${player.name} : -${formatMoney(rent)} ` +
+        `(${formatMoney(playerBalanceBefore)} → ${formatMoney(player.money)}) | ` +
+        `${owner.name} : +${formatMoney(rent)} ` +
+        `(${formatMoney(ownerBalanceBefore)} → ${formatMoney(owner.money)}).`
+    );
 
     updateMoney();
     updatePlayers();
