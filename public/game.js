@@ -592,13 +592,40 @@ function payTax(amount, playerIndex, actionTurnId) {
 
 function receiveBonus(playerIndex, actionTurnId) {
     const player = players[playerIndex];
+    const balanceBefore = player.money;
     player.money += BONUS_AMOUNT;
 
-    showMessage(`🎁 Bonus : tu reçois ${formatMoney(BONUS_AMOUNT)}.`);
-    log(`🎁 ${player.name} reçoit ${formatMoney(BONUS_AMOUNT)}.`);
+    showMessage(
+        `🎁 Bonus : +${formatMoney(BONUS_AMOUNT)}. ` +
+        `Nouveau solde : ${formatMoney(player.money)}.`
+    );
+    log(
+        `🎁 ${player.name} : +${formatMoney(BONUS_AMOUNT)} ` +
+        `(${formatMoney(balanceBefore)} → ${formatMoney(player.money)}).`
+    );
     updateMoney();
     updatePlayers();
     finishRoll(playerIndex, actionTurnId);
+}
+
+function applyChanceReward(
+    playerIndex,
+    actionTurnId,
+    amount,
+    resultText
+) {
+    const player = players[playerIndex];
+    const balanceBefore = player.money;
+    player.money += amount;
+
+    showMessage(
+        `${resultText} Nouveau solde : ${formatMoney(player.money)}.`
+    );
+    log(
+        `🎲 ${player.name} : +${formatMoney(amount)} ` +
+        `(${formatMoney(balanceBefore)} → ${formatMoney(player.money)}).`
+    );
+    finishChance(playerIndex, actionTurnId);
 }
 
 function drawChance(playerIndex, actionTurnId) {
@@ -609,15 +636,23 @@ function drawChance(playerIndex, actionTurnId) {
         {
             text: "💰 Tu gagnes 100 €.",
             resolve: () => {
-                player.money += 100;
-                finishChance(playerIndex, actionTurnId);
+                applyChanceReward(
+                    playerIndex,
+                    actionTurnId,
+                    100,
+                    "💰 Chance : tu gagnes 100 €."
+                );
             }
         },
         {
             text: "🎁 Bonus exceptionnel : +150 €.",
             resolve: () => {
-                player.money += BONUS_AMOUNT;
-                finishChance(playerIndex, actionTurnId);
+                applyChanceReward(
+                    playerIndex,
+                    actionTurnId,
+                    BONUS_AMOUNT,
+                    "🎁 Chance : bonus exceptionnel de 150 €."
+                );
             }
         },
         {
@@ -646,8 +681,12 @@ function drawChance(playerIndex, actionTurnId) {
         {
             text: "🏦 Tu récupères 75 €.",
             resolve: () => {
-                player.money += 75;
-                finishChance(playerIndex, actionTurnId);
+                applyChanceReward(
+                    playerIndex,
+                    actionTurnId,
+                    75,
+                    "🏦 Chance : tu récupères 75 €."
+                );
             }
         }
     ];
