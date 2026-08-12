@@ -309,17 +309,23 @@ function movePlayer(steps, playerIndex, actionTurnId, onComplete) {
     const totalSteps = Math.max(0, Math.floor(steps));
     let moved = 0;
 
+    const finishMovement = () => {
+        if (!isActiveTurn(playerIndex, actionTurnId)) return;
+
+        updateBoard();
+        updateMoney();
+        setTimeout(() => {
+            if (isActiveTurn(playerIndex, actionTurnId)) {
+                onComplete();
+            }
+        }, MOVE_RESOLVE_DELAY);
+    };
+
     const moveOneStep = () => {
         if (!isActiveTurn(playerIndex, actionTurnId)) return;
 
         if (moved >= totalSteps) {
-            updateBoard();
-            updateMoney();
-            setTimeout(() => {
-                if (isActiveTurn(playerIndex, actionTurnId)) {
-                    onComplete();
-                }
-            }, MOVE_RESOLVE_DELAY);
+            finishMovement();
             return;
         }
 
@@ -341,10 +347,15 @@ function movePlayer(steps, playerIndex, actionTurnId, onComplete) {
         updateBoard();
         updateMoney();
         updatePlayers();
-        setTimeout(moveOneStep, MOVE_STEP_DELAY);
+
+        if (moved < totalSteps) {
+            setTimeout(moveOneStep, MOVE_STEP_DELAY);
+        } else {
+            setTimeout(finishMovement, MOVE_RESOLVE_DELAY);
+        }
     };
 
-    moveOneStep();
+    setTimeout(moveOneStep, MOVE_STEP_DELAY);
 }
 
 function resolveCell(playerIndex, actionTurnId) {
