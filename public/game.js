@@ -120,13 +120,24 @@ function log(text) {
     if (!logElement) return;
 
     const line = document.createElement("div");
-    line.className = "log-line";
-    line.textContent = text;
-    logElement.prepend(line);
+    const timestamp = document.createElement("time");
+    const message = document.createElement("span");
+    const now = new Date();
 
-    while (logElement.children.length > 8) {
-        logElement.lastChild.remove();
-    }
+    line.className = "log-line";
+    timestamp.dateTime = now.toISOString();
+    timestamp.textContent = now.toLocaleTimeString("fr-FR", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit"
+    });
+    timestamp.style.marginRight = "8px";
+    timestamp.style.opacity = "0.7";
+    timestamp.title = now.toLocaleString("fr-FR");
+    message.textContent = text;
+
+    line.append(timestamp, message);
+    logElement.prepend(line);
 }
 
 function updateMoney() {
