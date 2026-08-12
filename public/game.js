@@ -296,6 +296,24 @@ function stylePlayerToken(token, player, playerIndex) {
     token.textContent = player.emoji;
     token.title = `Pion de ${player.name}`;
     token.setAttribute("aria-label", `Pion de ${player.name}`);
+
+    if (
+        playerIndex === currentPlayer &&
+        typeof token.animate === "function"
+    ) {
+        token.animate(
+            [
+                {transform: "translateY(5px) scale(.82)"},
+                {transform: "translateY(-3px) scale(1.08)"},
+                {transform: "translateY(0) scale(1)"}
+            ],
+            {
+                duration: MOVE_STEP_DELAY,
+                easing: "ease-out",
+                fill: "both"
+            }
+        );
+    }
 }
 
 function showMessage(text) {
