@@ -9,7 +9,7 @@ const {
 
 const DEFAULT_PORT = 8080;
 const DEFAULT_MAX_PLAYERS = 4;
-const DEFAULT_PRODUCTION_ORIGIN = "https://kbotik.github.io";
+const DEFAULT_PRODUCTION_ORIGIN = "https://fortunecityplay.fr";
 const DEFAULT_DEVELOPMENT_ORIGINS =
     "http://localhost:4173,http://127.0.0.1:4173";
 
