@@ -299,6 +299,14 @@ class GameServer {
             );
             return;
         }
+        if (connectedPlayers.some(candidate => !candidate.ready)) {
+            this.error(
+                socket,
+                "NOT_ALL_READY",
+                "Tous les joueurs doivent être prêts."
+            );
+            return;
+        }
 
         room.status = "PLAYING";
         room.currentPlayerId =

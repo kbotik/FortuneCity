@@ -13,6 +13,17 @@ const logElement = document.getElementById("log");
 const modal = document.getElementById("modal");
 const modalContent = document.getElementById("modalContent");
 const closeModalButton = document.getElementById("closeModal");
+const modeHome = document.getElementById("modeHome");
+const playersPanel = document.getElementById("playersPanel");
+const playLocalButton = document.getElementById("playLocal");
+const createOnlineButton = document.getElementById("createOnline");
+const homeCreateName = document.getElementById("homeCreateName");
+const showJoinOnlineButton = document.getElementById("showJoinOnline");
+const homeJoinForm = document.getElementById("homeJoinForm");
+const homePlayerName = document.getElementById("homePlayerName");
+const homeRoomCode = document.getElementById("homeRoomCode");
+const joinOnlineButton = document.getElementById("joinOnline");
+const cancelJoinButton = document.getElementById("cancelJoin");
 
 const START_MONEY = 1500;
 const PASS_START_BONUS = 200;
@@ -1261,6 +1272,35 @@ function importGameState(snapshot) {
     return true;
 }
 
+function showGameContent() {
+    if (modeHome) modeHome.classList.add("mode-content-hidden");
+    if (playersPanel) {
+        playersPanel.classList.remove("mode-content-hidden");
+    }
+    if (document.getElementById("game")) {
+        document.getElementById("game").classList.remove(
+            "mode-content-hidden"
+        );
+    }
+}
+
+function startOnlineMode(action, name, roomCode) {
+    showGameContent();
+
+    if (!onlineClient) {
+        onlineClient = new OnlineClient();
+        window.FortuneCityOnline = onlineClient;
+    }
+
+    if (action === "create") {
+        onlineClient.createRoom(name || "Joueur");
+    }
+
+    if (action === "join") {
+        onlineClient.joinRoom(roomCode || "", name || "Joueur");
+    }
+}
+
 function createOnlinePanel(client) {
     const gameSection = document.getElementById("game");
     if (!gameSection) return null;
@@ -1275,6 +1315,11 @@ function createOnlinePanel(client) {
     const readyButton = document.createElement("button");
     const startButton = document.createElement("button");
     const roomLabel = document.createElement("div");
+    const roomCodeDisplay = document.createElement("div");
+    const shareRow = document.createElement("div");
+    const copyCodeButton = document.createElement("button");
+    const shareButton = document.createElement("button");
+    const playerCount = document.createElement("div");
     const playersLabel = document.createElement("div");
 
     panel.className = "online-panel";
@@ -1311,8 +1356,8 @@ function createOnlinePanel(client) {
 
     createButton.textContent = "Créer une salle";
     joinButton.textContent = "Rejoindre";
-    readyButton.textContent = "Prêt";
-    startButton.textContent = "Lancer la partie";
+    readyButton.textContent = "✅ Je suis prêt";
+    startButton.textContent = "🎮 Lancer la partie";
     [createButton, joinButton, readyButton, startButton].forEach(button => {
         Object.assign(button.style, {
             border: "0",
@@ -1324,6 +1369,13 @@ function createOnlinePanel(client) {
     });
 
     roomLabel.style.marginTop = "8px";
+    roomCodeDisplay.className = "online-room-code";
+    shareRow.className = "online-share-row";
+    shareRow.style.display = "none";
+    copyCodeButton.textContent = "📋 Copier le code";
+    shareButton.textContent = "📤 Partager";
+    shareRow.append(copyCodeButton, shareButton);
+    playerCount.className = "online-player-count";
     playersLabel.style.fontSize = "13px";
     playersLabel.style.marginTop = "6px";
     playersLabel.style.whiteSpace = "pre-line";
@@ -1339,6 +1391,9 @@ function createOnlinePanel(client) {
         readyButton,
         startButton,
         roomLabel,
+        roomCodeDisplay,
+        shareRow,
+        playerCount,
         playersLabel
     );
     gameSection.prepend(panel);
@@ -1353,6 +1408,10 @@ function createOnlinePanel(client) {
         readyButton,
         startButton,
         roomLabel,
+        roomCodeDisplay,
+        copyCodeButton,
+        shareButton,
+        playerCount,
         playersLabel
     };
 
@@ -1373,6 +1432,14 @@ function createOnlinePanel(client) {
     startButton.addEventListener(
         "click",
         () => client.send("START_GAME")
+    );
+    copyCodeButton.addEventListener(
+        "click",
+        () => client.copyRoomCode()
+    );
+    shareButton.addEventListener(
+        "click",
+        () => client.shareRoom()
     );
 
     return controls;
@@ -1442,6 +1509,7 @@ class OnlineClient {
         this.modeActive = false;
         this.reconnectTimer = null;
         this.reconnectAttempt = 0;
+        this.pendingMessages = [];
         this.controls = createOnlinePanel(this);
         this.wsUrl = this.getWebSocketUrl();
         this.connect();
@@ -1477,6 +1545,11 @@ class OnlineClient {
         this.socket.addEventListener("open", () => {
             this.reconnectAttempt = 0;
             this.setStatus("Connecté au serveur.");
+            const pendingMessages = this.pendingMessages.splice(0);
+            pendingMessages.forEach(message => this.sendNow(
+                message.type,
+                message.payload
+            ));
             this.tryReconnect();
         });
         this.socket.addEventListener(
@@ -1539,11 +1612,15 @@ class OnlineClient {
 
     send(type, payload = {}) {
         if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
-            this.setStatus("Serveur indisponible.");
-            if (this.modeActive) this.lockOnlineControls();
-            return false;
+            this.pendingMessages.push({type, payload});
+            this.setStatus("Connexion au serveur...");
+            return true;
         }
 
+        return this.sendNow(type, payload);
+    }
+
+    sendNow(type, payload = {}) {
         this.socket.send(JSON.stringify({type, payload}));
         return true;
     }
@@ -1573,6 +1650,49 @@ class OnlineClient {
 
     decline() {
         this.send("DECLINE_PROPERTY");
+    }
+
+    async copyRoomCode() {
+        if (!this.roomCode) {
+            this.setStatus("Aucun code de salle à copier.");
+            return;
+        }
+
+        try {
+            await navigator.clipboard.writeText(this.roomCode);
+        } catch (error) {
+            const helper = document.createElement("textarea");
+            helper.value = this.roomCode;
+            document.body.appendChild(helper);
+            helper.select();
+            document.execCommand("copy");
+            helper.remove();
+        }
+
+        this.setStatus("Code de partie copié.");
+    }
+
+    async shareRoom() {
+        if (!this.roomCode) {
+            this.setStatus("Aucun code de salle à partager.");
+            return;
+        }
+
+        const text = `Rejoins ma partie FortuneCity ! Code : ${this.roomCode}`;
+        if (typeof navigator.share === "function") {
+            try {
+                await navigator.share({
+                    title: "FortuneCity",
+                    text
+                });
+                this.setStatus("Invitation partagée.");
+                return;
+            } catch (error) {
+                if (error.name === "AbortError") return;
+            }
+        }
+
+        await this.copyRoomCode();
     }
 
     saveSession(payload) {
@@ -1631,6 +1751,8 @@ class OnlineClient {
                 `🎲 Résultat serveur : ${payload.dice1} + ` +
                 `${payload.dice2} = ${payload.total}`
             );
+        } else if (message.type === "START_GAME") {
+            showMessage("🎲 FortuneCity — La partie commence...");
         } else if (message.type === "PLAYER_DISCONNECTED") {
             showMessage(`🔴 ${payload.playerName} est déconnecté.`);
         } else if (message.type === "PLAYER_RECONNECTED") {
@@ -1679,6 +1801,12 @@ class OnlineClient {
             roomState.code
                 ? `Salle : ${roomState.code} — ${roomState.status}`
                 : "";
+        this.controls.roomCodeDisplay.textContent =
+            roomState.code || "En attente du code de salle";
+        this.controls.shareRow.style.display =
+            roomState.code ? "flex" : "none";
+        this.controls.playerCount.textContent =
+            `${roomState.players.length} / 4 joueurs`;
         this.controls.playersLabel.textContent =
             roomState.players
                 .map(player =>
@@ -1693,19 +1821,37 @@ class OnlineClient {
         );
         this.localReady = Boolean(localPlayer && localPlayer.ready);
         this.controls.readyButton.textContent =
-            this.localReady ? "Pas prêt" : "Prêt";
+            this.localReady
+                ? "↩️ Je ne suis plus prêt"
+                : "✅ Je suis prêt";
         this.controls.startButton.disabled =
             roomState.hostId !== this.playerId ||
             roomState.players.length < 2 ||
+            !roomState.players.every(player => player.ready) ||
             roomState.status === "PLAYING" ||
             roomState.status === "FINISHED";
         this.controls.readyButton.disabled =
+            !localPlayer ||
             roomState.status === "PLAYING" ||
             roomState.status === "FINISHED";
     }
 
     renderPendingAction(roomState) {
         updateAction();
+        if (roomState.status === "PLAYING") {
+            const activePlayer = roomState.players.find(
+                player => player.id === roomState.currentPlayerId
+            );
+            if (activePlayer) {
+                showMessage(
+                    activePlayer.id === this.playerId
+                        ? "🎮 C'est ton tour !"
+                        : `🎮 Tour de ${activePlayer.name}. ` +
+                          "Attends ton tour..."
+                );
+            }
+        }
+
         if (
             roomState.status !== "PLAYING" ||
             roomState.pendingPropertyIndex === null ||
@@ -1838,12 +1984,74 @@ if (modal) {
     });
 }
 
+if (playLocalButton) {
+    playLocalButton.addEventListener("click", () => {
+        showGameContent();
+        if (onlineClient && onlineClient.modeActive) {
+            onlineClient.setStatus("Mode local sélectionné.");
+        }
+    });
+}
+
+if (createOnlineButton) {
+    createOnlineButton.addEventListener("click", () => {
+        startOnlineMode(
+            "create",
+            homeCreateName ? homeCreateName.value : "Joueur"
+        );
+    });
+}
+
+if (showJoinOnlineButton && homeJoinForm) {
+    showJoinOnlineButton.addEventListener("click", () => {
+        homeJoinForm.classList.remove("hidden");
+        showJoinOnlineButton.classList.add("mode-content-hidden");
+        if (homePlayerName) homePlayerName.focus();
+    });
+}
+
+if (cancelJoinButton && homeJoinForm) {
+    cancelJoinButton.addEventListener("click", () => {
+        homeJoinForm.classList.add("hidden");
+        if (showJoinOnlineButton) {
+            showJoinOnlineButton.classList.remove("mode-content-hidden");
+        }
+    });
+}
+
+if (joinOnlineButton) {
+    joinOnlineButton.addEventListener("click", () => {
+        const name = homePlayerName
+            ? homePlayerName.value.trim()
+            : "";
+        const code = homeRoomCode
+            ? homeRoomCode.value.replace(/\s+/g, "").toUpperCase()
+            : "";
+
+        if (!name) {
+            homePlayerName.setCustomValidity("Entre un pseudo.");
+            homePlayerName.reportValidity();
+            return;
+        }
+        if (!/^[A-Z2-9]{6}$/.test(code)) {
+            homeRoomCode.setCustomValidity(
+                "Le code doit contenir 6 caractères."
+            );
+            homeRoomCode.reportValidity();
+            return;
+        }
+
+        homePlayerName.setCustomValidity("");
+        homeRoomCode.setCustomValidity("");
+        startOnlineMode("join", name, code);
+    });
+}
+
 resetGame();
 
 if (
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("mode") === "online"
 ) {
-    onlineClient = new OnlineClient();
-    window.FortuneCityOnline = onlineClient;
+    startOnlineMode("connect");
 }

@@ -20,12 +20,41 @@
 
 <main>
 
-<section class="players-panel">
+<section id="modeHome" class="mode-home">
+  <div class="mode-home-icon">🏙️</div>
+  <h1>FortuneCity</h1>
+  <p>Choisis comment tu veux jouer.</p>
+  <input id="homeCreateName" class="mode-home-name"
+    maxlength="24" placeholder="Ton pseudo pour le mode online">
+  <button id="playLocal" class="main-button">🎮 Jouer en local</button>
+  <button id="createOnline" class="secondary-button">
+    🏠 Créer une partie
+  </button>
+  <button id="showJoinOnline" class="tertiary-button">
+    🔗 Rejoindre une partie
+  </button>
+
+  <div id="homeJoinForm" class="home-join-form hidden">
+    <label for="homePlayerName">Pseudo</label>
+    <input id="homePlayerName" maxlength="24" placeholder="Ton pseudo">
+    <label for="homeRoomCode">Code de salle</label>
+    <input id="homeRoomCode" maxlength="6" placeholder="ABC123"
+      autocomplete="off">
+    <button id="joinOnline" class="secondary-button">
+      🔗 Rejoindre
+    </button>
+    <button id="cancelJoin" class="tertiary-button">
+      Retour
+    </button>
+  </div>
+</section>
+
+<section id="playersPanel" class="players-panel mode-content-hidden">
   <div class="panel-title">👥 Joueurs</div>
   <div id="players"></div>
 </section>
 
-<section id="game">
+<section id="game" class="mode-content-hidden">
 
   <div id="board"></div>
 
