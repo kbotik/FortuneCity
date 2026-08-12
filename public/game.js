@@ -1389,12 +1389,14 @@ function createOnlinePanel(client) {
     roomLabel.style.marginTop = "8px";
     roomCodeDisplay.className = "online-room-code";
     shareRow.className = "online-share-row";
-    shareRow.style.display = "none";
+    shareRow.style.display = "flex";
     copyCodeButton.textContent = "📋 Copier le code";
     shareButton.textContent = "📤 Partager";
     shareRow.append(copyCodeButton, shareButton);
     playerCount.className = "online-player-count";
-    leaveButton.style.display = "none";
+    copyCodeButton.disabled = true;
+    shareButton.disabled = true;
+    leaveButton.disabled = true;
     playersLabel.style.fontSize = "13px";
     playersLabel.style.marginTop = "6px";
     playersLabel.style.whiteSpace = "pre-line";
@@ -1862,8 +1864,11 @@ class OnlineClient {
                 : "";
         this.controls.roomCodeDisplay.textContent =
             roomState.code || "En attente du code de salle";
-        this.controls.shareRow.style.display =
-            roomState.code ? "flex" : "none";
+        const hasRoom = Boolean(roomState.code);
+        this.controls.shareRow.style.display = "flex";
+        this.controls.copyCodeButton.disabled = !hasRoom;
+        this.controls.shareButton.disabled = !hasRoom;
+        this.controls.leaveButton.disabled = !hasRoom;
         this.controls.playerCount.textContent =
             `${roomState.players.length} / 4 joueurs`;
         this.controls.leaveButton.style.display =
