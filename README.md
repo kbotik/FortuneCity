@@ -64,3 +64,54 @@ Pour utiliser GitHub Pages avec plusieurs appareils, le serveur WebSocket doit �
 Le serveur Node n’embarque pas TLS lui-même : en production, placer un proxy HTTPS/TLS devant lui et utiliser `wss://` côté navigateur. Le endpoint `/health` permet au fournisseur d’hébergement de vérifier que le processus répond.
 
 Le client lit aussi la configuration `FORTUNECITY_WS_URL` depuis la balise meta de `public/index.html` ou depuis `window.FORTUNECITY_WS_URL`. Elle est volontairement vide dans le dépôt tant qu’aucune URL publique réelle n’existe. Le paramètre d’URL `?ws=` reste disponible pour les tests et ne doit pas utiliser `ws://` depuis une page HTTPS.
+
+## Déployer le serveur sur un VPS
+
+Le serveur Node est indépendant du déploiement GitHub Pages. Les commandes suivantes sont à exécuter sur le VPS, après avoir configuré le dépôt et le domaine :
+
+```bash
+sudo apt update
+sudo apt install -y nodejs npm
+git clone <URL_DU_DEPOT> FortuneCity
+cd FortuneCity
+npm ci --omit=dev
+NODE_ENV=production \
+PORT=8080 \
+MAX_PLAYERS=4 \
+CORS_ORIGIN="https://kbotik.github.io" \
+npm start
+```
+
+Vérifier le processus avec :
+
+```bash
+curl http://127.0.0.1:8080/health
+```
+
+Le serveur écoute sur `0.0.0.0` et peut donc être placé derrière un reverse proxy HTTPS. Exemple Nginx avec un domaine à remplacer :
+
+```nginx
+server {
+    listen 80;
+    server_name SERVER_DOMAIN;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+Après configuration DNS, installer le certificat sans modifier le dépôt :
+
+```bash
+sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d SERVER_DOMAIN
+```
+
+Le client GitHub Pages devra alors recevoir l’URL réelle `wss://SERVER_DOMAIN`, via `FORTUNECITY_WS_URL` dans la configuration statique ou via `?ws=`. Aucun domaine fictif n’est configuré ici. `FORTUNECITY_WS_URL` est une configuration client et ne contient aucun secret.

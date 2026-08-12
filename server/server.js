@@ -9,10 +9,13 @@ const {
 
 const DEFAULT_PORT = 8080;
 const DEFAULT_MAX_PLAYERS = 4;
-const DEFAULT_CORS_ORIGIN = "https://kbotik.github.io";
+const DEFAULT_PRODUCTION_ORIGIN = "https://kbotik.github.io";
+const DEFAULT_DEVELOPMENT_ORIGINS =
+    "http://localhost:4173,http://127.0.0.1:4173";
 
 const parsedPort = Number(process.env.PORT);
 const parsedMaxPlayers = Number(process.env.MAX_PLAYERS);
+const NODE_ENV = process.env.NODE_ENV || "development";
 const PORT = Number.isInteger(parsedPort) && parsedPort > 0
     ? parsedPort
     : DEFAULT_PORT;
@@ -23,7 +26,18 @@ const MAX_PLAYERS =
         ? parsedMaxPlayers
         : DEFAULT_MAX_PLAYERS;
 const CORS_ORIGIN =
-    process.env.CORS_ORIGIN || DEFAULT_CORS_ORIGIN;
+    process.env.CORS_ORIGIN ||
+    (
+        NODE_ENV === "production"
+            ? DEFAULT_PRODUCTION_ORIGIN
+            : DEFAULT_DEVELOPMENT_ORIGINS
+    );
+
+if (NODE_ENV === "production" && CORS_ORIGIN === "*") {
+    throw new Error(
+        "CORS_ORIGIN=* is not allowed when NODE_ENV=production."
+    );
+}
 
 const gameServer = new GameServer({maxPlayers: MAX_PLAYERS});
 
@@ -79,11 +93,15 @@ webSocketServer.on("connection", socket => {
 httpServer.listen(PORT, "0.0.0.0", () => {
     console.log(
         `FortuneCity server listening on port ${PORT} ` +
-        `(CORS_ORIGIN=${CORS_ORIGIN})`
+        `(NODE_ENV=${NODE_ENV}, CORS_ORIGIN=${CORS_ORIGIN})`
     );
 });
 
+let shuttingDown = false;
+
 function shutdown() {
+    if (shuttingDown) return;
+    shuttingDown = true;
     console.log("Stopping FortuneCity server...");
 
     for (const room of gameServer.roomManager.rooms.values()) {
