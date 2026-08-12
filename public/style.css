@@ -134,6 +134,24 @@ main {
   opacity: .45;
 }
 
+.online-panel button {
+  min-height: 44px;
+  background: #e2e8f0;
+  color: #172033;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.online-panel .online-share-row button {
+  background: #ffd400;
+  color: #172033;
+}
+
+.online-panel .online-share-row button:disabled {
+  background: #64748b;
+  color: #e2e8f0;
+}
+
 .online-room-code {
   margin: 10px 0;
   padding: 12px;
