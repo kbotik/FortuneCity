@@ -20,6 +20,20 @@ const BONUS_AMOUNT = 150;
 const MOVE_STEP_DELAY = 180;
 const MOVE_RESOLVE_DELAY = 350;
 const PLAYER_COLORS = ["#2563eb", "#db2777", "#16a34a", "#ea580c"];
+const PLAYER_TOKEN_STYLES = [
+    {
+        backgroundColor: "#2563eb",
+        borderColor: "#bfdbfe",
+        borderRadius: "50%",
+        borderStyle: "solid"
+    },
+    {
+        backgroundColor: "#db2777",
+        borderColor: "#fbcfe8",
+        borderRadius: "8px",
+        borderStyle: "dashed"
+    }
+];
 
 const players = [
     {
@@ -216,7 +230,7 @@ function createBoard() {
                 token.className = "token";
                 if (playerIndex === 1) token.classList.add("two");
                 if (playerIndex === 2) token.classList.add("three");
-                token.textContent = player.emoji;
+                stylePlayerToken(token, player, playerIndex);
                 tokensElement.appendChild(token);
             });
 
@@ -229,6 +243,35 @@ function createBoard() {
 
 function updateBoard() {
     createBoard();
+}
+
+function stylePlayerToken(token, player, playerIndex) {
+    const visual = PLAYER_TOKEN_STYLES[
+        playerIndex % PLAYER_TOKEN_STYLES.length
+    ];
+
+    Object.assign(token.style, {
+        ...visual,
+        alignItems: "center",
+        bottom: "4px",
+        boxShadow: "0 2px 6px rgba(0, 0, 0, .45)",
+        boxSizing: "border-box",
+        color: "#ffffff",
+        display: "flex",
+        fontSize: "clamp(16px, 3.5vw, 28px)",
+        fontWeight: "900",
+        height: "clamp(28px, 7vw, 42px)",
+        justifyContent: "center",
+        lineHeight: "1",
+        outline: "2px solid rgba(15, 23, 42, .75)",
+        right: `${4 + playerIndex * 27}px`,
+        textShadow: "0 1px 2px rgba(0, 0, 0, .65)",
+        width: "clamp(28px, 7vw, 42px)"
+    });
+
+    token.textContent = player.emoji;
+    token.title = `Pion de ${player.name}`;
+    token.setAttribute("aria-label", `Pion de ${player.name}`);
 }
 
 function showMessage(text) {
