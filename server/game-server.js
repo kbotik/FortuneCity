@@ -190,15 +190,11 @@ class GameServer {
                 reconnected: result.reconnected
             });
 
-            this.broadcast(
-                result.room,
-                result.reconnected
-                    ? "PLAYER_RECONNECTED"
-                    : "ROOM_STATE",
-                result.reconnected
-                    ? {playerId: result.player.id}
-                    : {}
-            );
+            if (result.reconnected) {
+                this.broadcast(result.room, "PLAYER_RECONNECTED", {
+                    playerId: result.player.id
+                });
+            }
             this.broadcastState(result.room);
         } catch (error) {
             this.error(socket, error.message, "Connexion à la salle refusée.");
@@ -705,7 +701,6 @@ class GameServer {
 
     finishAction(room) {
         room.movementInProgress = false;
-        this.broadcast(room, "ROOM_STATE", {});
         this.broadcastState(room);
     }
 
