@@ -42,7 +42,7 @@ set +a
 npm start
 ```
 
-Variables disponibles : `PORT`, `MAX_PLAYERS` et `CORS_ORIGIN`.
+Variables disponibles : `NODE_ENV`, `PORT`, `MAX_PLAYERS`, `CORS_ORIGIN` et `FORTUNECITY_WS_URL`.
 
 En production, utiliser par exemple :
 
