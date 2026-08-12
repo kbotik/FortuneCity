@@ -27,7 +27,7 @@ Le serveur temps réel est séparé du site statique :
 ```bash
 npm install
 PORT=8080 MAX_PLAYERS=4 \
-  CORS_ORIGIN="https://kbotik.github.io" npm start
+  CORS_ORIGIN="http://localhost:4173" npm start
 ```
 
 Le contrôle de santé est disponible sur <http://localhost:8080/health>.
@@ -43,6 +43,13 @@ npm start
 ```
 
 Variables disponibles : `PORT`, `MAX_PLAYERS` et `CORS_ORIGIN`.
+
+En production, utiliser par exemple :
+
+```bash
+PORT=8080 MAX_PLAYERS=4 \
+  CORS_ORIGIN="https://kbotik.github.io" npm start
+```
 
 Pour tester le mode online dans un navigateur local, ouvrir :
 
