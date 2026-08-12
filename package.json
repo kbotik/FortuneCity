@@ -1,0 +1,24 @@
+{
+  "name": "workspace",
+  "version": "1.0.0",
+  "description": "Jeu de plateau web statique, prêt à être publié avec GitHub Pages.",
+  "main": "index.js",
+  "scripts": {
+    "test": "node --check server/server.js && node --check server/game-server.js && node --check server/room-manager.js && node --check public/game.js",
+    "start": "node server/server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kbotik/FortuneCity.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/kbotik/FortuneCity/issues"
+  },
+  "homepage": "https://github.com/kbotik/FortuneCity#readme",
+  "dependencies": {
+    "ws": "^8.21.3"
+  }
+}

@@ -4,3 +4,7 @@
 *.bak4
 *.save
 *.avant-grosse-mise-a-jour
+node_modules/
+.env
+.env.*
+!.env.example
