@@ -17,6 +17,8 @@ const closeModalButton = document.getElementById("closeModal");
 const START_MONEY = 1500;
 const PASS_START_BONUS = 200;
 const BONUS_AMOUNT = 150;
+const MOVE_STEP_DELAY = 180;
+const MOVE_RESOLVE_DELAY = 350;
 const PLAYER_COLORS = ["#2563eb", "#db2777", "#16a34a", "#ea580c"];
 
 const players = [
@@ -301,6 +303,8 @@ function rollDice() {
 }
 
 function movePlayer(steps, playerIndex, actionTurnId, onComplete) {
+    if (!isActiveTurn(playerIndex, actionTurnId)) return;
+
     const player = players[playerIndex];
     let moved = 0;
 
@@ -314,7 +318,7 @@ function movePlayer(steps, playerIndex, actionTurnId, onComplete) {
                 if (isActiveTurn(playerIndex, actionTurnId)) {
                     onComplete();
                 }
-            }, 350);
+            }, MOVE_RESOLVE_DELAY);
             return;
         }
 
@@ -333,7 +337,7 @@ function movePlayer(steps, playerIndex, actionTurnId, onComplete) {
         updateBoard();
         updateMoney();
         updatePlayers();
-        setTimeout(moveOneStep, 180);
+        setTimeout(moveOneStep, MOVE_STEP_DELAY);
     };
 
     moveOneStep();
