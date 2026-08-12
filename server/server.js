@@ -2,7 +2,10 @@
 
 const http = require("node:http");
 const {WebSocketServer} = require("ws");
-const {GameServer} = require("./game-server");
+const {
+    GameServer,
+    MAX_MESSAGE_BYTES
+} = require("./game-server");
 
 const DEFAULT_PORT = 8080;
 const DEFAULT_MAX_PLAYERS = 4;
@@ -57,7 +60,7 @@ const httpServer = http.createServer((request, response) => {
 
 const webSocketServer = new WebSocketServer({
     server: httpServer,
-    maxPayload: 16 * 1024,
+    maxPayload: MAX_MESSAGE_BYTES + 1024,
     verifyClient: ({origin}, done) => {
         if (!isAllowedOrigin(origin)) {
             done(false, 403, "Origin not allowed");
