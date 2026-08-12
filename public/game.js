@@ -42,6 +42,7 @@ const players = [
 
 let currentPlayer = 0;
 let rolling = false;
+let movementInProgress = false;
 let gameOver = false;
 let turnId = 0;
 
@@ -265,9 +266,10 @@ function isActiveTurn(playerIndex, actionTurnId) {
 }
 
 function rollDice() {
-    if (rolling || gameOver) return;
+    if (rolling || movementInProgress || gameOver) return;
 
     rolling = true;
+    movementInProgress = true;
     turnId += 1;
 
     const playerIndex = currentPlayer;
@@ -310,7 +312,12 @@ function movePlayer(steps, playerIndex, actionTurnId, onComplete) {
     let moved = 0;
 
     const finishMovement = () => {
-        if (!isActiveTurn(playerIndex, actionTurnId)) return;
+        if (
+            !isActiveTurn(playerIndex, actionTurnId) ||
+            !movementInProgress
+        ) {
+            return;
+        }
 
         updateBoard();
         updateMoney();
@@ -573,6 +580,7 @@ function checkBankruptcy(playerIndex) {
     player.bankrupt = true;
     gameOver = true;
     rolling = false;
+    movementInProgress = false;
 
     const winner = players.find(
         (candidate, index) =>
@@ -603,6 +611,7 @@ function finishRoll(playerIndex, actionTurnId) {
     if (!isActiveTurn(playerIndex, actionTurnId)) return;
 
     rolling = false;
+    movementInProgress = false;
     updateAction();
     if (rollButton) rollButton.disabled = false;
     if (endTurnButton) endTurnButton.disabled = false;
@@ -611,7 +620,7 @@ function finishRoll(playerIndex, actionTurnId) {
 }
 
 function endTurn() {
-    if (rolling || gameOver) return;
+    if (rolling || movementInProgress || gameOver) return;
 
     turnId += 1;
     let nextPlayer = (currentPlayer + 1) % players.length;
@@ -656,6 +665,7 @@ function resetGame() {
 
     currentPlayer = 0;
     rolling = false;
+    movementInProgress = false;
     gameOver = false;
     updateAction();
     hideModal();
