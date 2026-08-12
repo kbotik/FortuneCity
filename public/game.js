@@ -875,15 +875,17 @@ function hideModal() {
     }
 }
 
+function resetPlayerState(player) {
+    player.money = START_MONEY;
+    player.position = 0;
+    player.properties = [];
+    player.bankrupt = false;
+}
+
 function resetGame() {
     clearDiceAnimation();
     turnId += 1;
-    players.forEach(player => {
-        player.money = START_MONEY;
-        player.position = 0;
-        player.properties = [];
-        player.bankrupt = false;
-    });
+    players.forEach(resetPlayerState);
 
     currentPlayer = 0;
     rolling = false;
@@ -900,6 +902,7 @@ function resetGame() {
     if (diceElement) diceElement.textContent = "🎲 🎲";
     if (rollButton) rollButton.disabled = false;
     if (endTurnButton) endTurnButton.disabled = true;
+    if (newGameButton) newGameButton.disabled = false;
 }
 
 if (rollButton) {
