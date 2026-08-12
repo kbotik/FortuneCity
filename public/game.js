@@ -1284,6 +1284,16 @@ function showGameContent() {
     }
 }
 
+function returnToModeHome() {
+    if (modeHome) modeHome.classList.remove("mode-content-hidden");
+    if (playersPanel) {
+        playersPanel.classList.add("mode-content-hidden");
+    }
+    const gameSection = document.getElementById("game");
+    if (gameSection) gameSection.classList.add("mode-content-hidden");
+    updateAction();
+}
+
 function startOnlineMode(action, name, roomCode) {
     showGameContent();
 
@@ -1320,6 +1330,7 @@ function createOnlinePanel(client) {
     const copyCodeButton = document.createElement("button");
     const shareButton = document.createElement("button");
     const playerCount = document.createElement("div");
+    const leaveButton = document.createElement("button");
     const playersLabel = document.createElement("div");
 
     panel.className = "online-panel";
@@ -1358,7 +1369,14 @@ function createOnlinePanel(client) {
     joinButton.textContent = "Rejoindre";
     readyButton.textContent = "✅ Je suis prêt";
     startButton.textContent = "🎮 Lancer la partie";
-    [createButton, joinButton, readyButton, startButton].forEach(button => {
+    leaveButton.textContent = "🚪 Quitter la salle";
+    [
+        createButton,
+        joinButton,
+        readyButton,
+        startButton,
+        leaveButton
+    ].forEach(button => {
         Object.assign(button.style, {
             border: "0",
             borderRadius: "10px",
@@ -1376,6 +1394,7 @@ function createOnlinePanel(client) {
     shareButton.textContent = "📤 Partager";
     shareRow.append(copyCodeButton, shareButton);
     playerCount.className = "online-player-count";
+    leaveButton.style.display = "none";
     playersLabel.style.fontSize = "13px";
     playersLabel.style.marginTop = "6px";
     playersLabel.style.whiteSpace = "pre-line";
@@ -1394,6 +1413,7 @@ function createOnlinePanel(client) {
         roomCodeDisplay,
         shareRow,
         playerCount,
+        leaveButton,
         playersLabel
     );
     gameSection.prepend(panel);
@@ -1412,6 +1432,7 @@ function createOnlinePanel(client) {
         copyCodeButton,
         shareButton,
         playerCount,
+        leaveButton,
         playersLabel
     };
 
@@ -1440,6 +1461,10 @@ function createOnlinePanel(client) {
     shareButton.addEventListener(
         "click",
         () => client.shareRoom()
+    );
+    leaveButton.addEventListener(
+        "click",
+        () => client.leaveRoom()
     );
 
     return controls;
@@ -1657,6 +1682,15 @@ class OnlineClient {
         this.send("DECLINE_PROPERTY");
     }
 
+    leaveRoom() {
+        if (!this.modeActive) {
+            returnToModeHome();
+            return;
+        }
+
+        this.send("LEAVE_ROOM");
+    }
+
     async copyRoomCode() {
         if (!this.roomCode) {
             this.setStatus("Aucun code de salle à copier.");
@@ -1739,6 +1773,15 @@ class OnlineClient {
                     ? "Joueur reconnecté."
                     : "Salle rejointe."
             );
+        } else if (message.type === "ROOM_LEFT") {
+            this.modeActive = false;
+            this.roomCode = null;
+            this.playerId = null;
+            this.reconnectToken = null;
+            this.roomState = null;
+            sessionStorage.removeItem("fortunecity-online");
+            returnToModeHome();
+            this.setStatus("Salle quittée.");
         } else if (message.type === "ERROR") {
             const errorMessage = this.friendlyError(
                 payload.code,
@@ -1823,12 +1866,15 @@ class OnlineClient {
             roomState.code ? "flex" : "none";
         this.controls.playerCount.textContent =
             `${roomState.players.length} / 4 joueurs`;
+        this.controls.leaveButton.style.display =
+            roomState.code ? "block" : "none";
         this.controls.playersLabel.textContent =
             roomState.players
-                .map(player =>
+                .map((player, index) =>
+                    `${index + 1}. ` +
                     `${player.connected ? "🟢" : "⚪"} ${player.name}` +
                     `${player.id === roomState.hostId ? " — Hôte" : ""}` +
-                    `${player.ready ? " — Prêt" : ""}`
+                    ` — ${player.ready ? "Prêt ✓" : "En attente"}`
                 )
                 .join("\n");
 

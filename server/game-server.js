@@ -62,7 +62,8 @@ const MESSAGE_TYPES = new Set([
     "ROLL_DICE",
     "BUY_PROPERTY",
     "DECLINE_PROPERTY",
-    "END_TURN"
+    "END_TURN",
+    "LEAVE_ROOM"
 ]);
 
 function createHistoryEntry(text) {
@@ -137,7 +138,8 @@ class GameServer {
             ROLL_DICE: () => this.rollDice(socket),
             BUY_PROPERTY: () => this.buyProperty(socket, payload),
             DECLINE_PROPERTY: () => this.declineProperty(socket),
-            END_TURN: () => this.endTurn(socket)
+            END_TURN: () => this.endTurn(socket),
+            LEAVE_ROOM: () => this.leaveRoom(socket)
         };
 
         try {
@@ -780,6 +782,67 @@ class GameServer {
         this.record(room, `🎮 Tour de ${nextPlayer.name}.`);
         this.broadcast(room, "TURN_CHANGED", {
             playerId: nextPlayer.id
+        });
+        this.broadcastState(room);
+    }
+
+    leaveRoom(socket) {
+        const session = this.requireSession(socket);
+        if (!session) return;
+
+        const {room, player} = session;
+        const wasPlaying = room.status === "PLAYING";
+
+        if (wasPlaying) {
+            player.socket = null;
+            player.connected = false;
+            player.disconnectedAt = Date.now();
+            const newHost = this.roomManager.reassignHost(
+                room,
+                player.id
+            );
+            this.record(room, `🚪 ${player.name} quitte la salle.`);
+            this.logger.info(
+                `${player.name} left room ${room.code}.`
+            );
+            this.send(socket, "ROOM_LEFT", room, {});
+            this.broadcast(room, "PLAYER_DISCONNECTED", {
+                playerId: player.id,
+                playerName: player.name
+            });
+            if (newHost) {
+                this.logger.info(
+                    `${newHost.name} is now host of room ${room.code}.`
+                );
+            }
+            this.broadcastState(room);
+            socket.close(1000, "Left room");
+            return;
+        }
+
+        const playerIndex = room.players.indexOf(player);
+        if (playerIndex !== -1) room.players.splice(playerIndex, 1);
+        this.roomManager.players.delete(player.id);
+
+        const newHost = this.roomManager.reassignHost(room, player.id);
+        room.status = room.players.length > 1 ? "WAITING" : "LOBBY";
+        this.record(room, `🚪 ${player.name} quitte la salle.`);
+        this.send(socket, "ROOM_LEFT", room, {});
+        socket.close(1000, "Left room");
+
+        if (room.players.length === 0) {
+            this.roomManager.destroyRoom(room);
+            return;
+        }
+
+        if (newHost) {
+            this.logger.info(
+                `${newHost.name} is now host of room ${room.code}.`
+            );
+        }
+        this.broadcast(room, "PLAYER_DISCONNECTED", {
+            playerId: player.id,
+            playerName: player.name
         });
         this.broadcastState(room);
     }
