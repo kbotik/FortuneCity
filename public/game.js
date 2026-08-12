@@ -1805,9 +1805,17 @@ class OnlineClient {
     renderRoom(roomState) {
         if (!this.controls) return;
 
+        const localPlayer = roomState.players.find(
+            player => player.id === this.playerId
+        );
+        const hostLabel =
+            localPlayer && localPlayer.id === roomState.hostId
+                ? " — 👑 Hôte"
+                : "";
         this.controls.roomLabel.textContent =
             roomState.code
-                ? `Salle : ${roomState.code} — ${roomState.status}`
+                ? `Salle : ${roomState.code} — ${roomState.status} ` +
+                  `— ${roomState.players.length} / 4${hostLabel}`
                 : "";
         this.controls.roomCodeDisplay.textContent =
             roomState.code || "En attente du code de salle";
@@ -1824,9 +1832,6 @@ class OnlineClient {
                 )
                 .join("\n");
 
-        const localPlayer = roomState.players.find(
-            player => player.id === this.playerId
-        );
         this.localReady = Boolean(localPlayer && localPlayer.ready);
         this.controls.readyButton.textContent =
             this.localReady
