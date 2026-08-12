@@ -104,6 +104,10 @@ const cellsData = [
     {type: "parking", name: "Parking", icon: "🅿️"}
 ];
 
+const PRISON_POSITION = cellsData.findIndex(
+    cell => cell.type === "jail"
+);
+
 function formatMoney(amount) {
     return `${amount.toLocaleString("fr-FR")} €`;
 }
@@ -422,6 +426,7 @@ function movePlayer(steps, playerIndex, actionTurnId, onComplete) {
         }
 
         const previousPosition = player.position;
+        const leavingPrison = previousPosition === PRISON_POSITION;
         player.position = (player.position + 1) % cellsData.length;
 
         if (player.position === 0 && previousPosition !== 0) {
@@ -433,9 +438,17 @@ function movePlayer(steps, playerIndex, actionTurnId, onComplete) {
         }
 
         moved += 1;
-        showMessage(
-            `🚶 ${player.name} avance : case ${moved}/${totalSteps}.`
-        );
+        if (leavingPrison) {
+            showMessage(
+                `🚪 ${player.name} sort de la prison et ` +
+                `reprend son déplacement.`
+            );
+            log(`🚪 ${player.name} sort de la prison.`);
+        } else {
+            showMessage(
+                `🚶 ${player.name} avance : case ${moved}/${totalSteps}.`
+            );
+        }
         updateBoard();
         updateMoney();
         updatePlayers();
@@ -478,7 +491,8 @@ function resolveCell(playerIndex, actionTurnId) {
     }
 
     const messages = {
-        jail: "🚓 Tu es simplement de passage en prison.",
+        jail: "🚓 Tu entres sur la case Prison. " +
+            "Tu es simplement de passage et tu n'es pas bloqué.",
         station: "🚂 Gare ! Rien à payer.",
         parking: "🅿️ Parking gratuit.",
         start: "🚩 Tu es sur le départ."
