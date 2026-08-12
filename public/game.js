@@ -1562,7 +1562,11 @@ class OnlineClient {
                     ? "Connexion perdue. Reconnexion..."
                     : "Serveur déconnecté. Le mode local reste disponible."
             );
-            if (this.modeActive || sessionStorage.getItem("fortunecity-online")) {
+            if (
+                this.modeActive ||
+                this.pendingMessages.length > 0 ||
+                sessionStorage.getItem("fortunecity-online")
+            ) {
                 this.lockOnlineControls();
                 this.scheduleReconnect();
             }
@@ -1614,6 +1618,7 @@ class OnlineClient {
         if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
             this.pendingMessages.push({type, payload});
             this.setStatus("Connexion au serveur...");
+            this.scheduleReconnect();
             return true;
         }
 
@@ -1720,11 +1725,6 @@ class OnlineClient {
             return;
         }
 
-        if (message.state) {
-            this.roomState = message.state;
-            applyOnlineRoomState(message.state);
-        }
-
         const payload = message.payload || {};
         if (message.type === "ROOM_CREATED") {
             this.modeActive = true;
@@ -1746,7 +1746,14 @@ class OnlineClient {
             );
             this.setStatus(errorMessage);
             showMessage(errorMessage);
-        } else if (message.type === "DICE_RESULT") {
+        }
+
+        if (message.state) {
+            this.roomState = message.state;
+            applyOnlineRoomState(message.state);
+        }
+
+        if (message.type === "DICE_RESULT") {
             showMessage(
                 `🎲 Résultat serveur : ${payload.dice1} + ` +
                 `${payload.dice2} = ${payload.total}`
@@ -1783,6 +1790,7 @@ class OnlineClient {
             INSUFFICIENT_FUNDS: "Argent insuffisant.",
             INVALID_ROOM_CODE: "Code de salle invalide.",
             NOT_ENOUGH_PLAYERS: "Il faut au moins deux joueurs.",
+            NOT_ALL_READY: "Tous les joueurs doivent être prêts.",
             PLAYER_NOT_FOUND: "Joueur introuvable."
         };
 
