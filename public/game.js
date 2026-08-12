@@ -190,12 +190,36 @@ function createBoard() {
 
         const ownerIndex = getPropertyOwnerIndex(cell);
         if (ownerIndex !== -1) {
+            const ownerColor =
+                PLAYER_COLORS[ownerIndex % PLAYER_COLORS.length];
+
             element.classList.add("property-owned");
             element.style.setProperty(
                 "--owner-color",
-                PLAYER_COLORS[ownerIndex % PLAYER_COLORS.length]
+                ownerColor
             );
             element.title = `Propriété de ${players[ownerIndex].name}`;
+
+            const ownerBadge = document.createElement("span");
+            ownerBadge.className = "cell-owner";
+            ownerBadge.textContent = `👤 ${players[ownerIndex].name}`;
+            Object.assign(ownerBadge.style, {
+                backgroundColor: ownerColor,
+                borderRadius: "6px",
+                color: "#ffffff",
+                fontSize: "clamp(7px, 1.4vw, 11px)",
+                fontWeight: "800",
+                left: "3px",
+                overflow: "hidden",
+                padding: "2px 3px",
+                position: "absolute",
+                right: "3px",
+                textOverflow: "ellipsis",
+                top: "3px",
+                whiteSpace: "nowrap",
+                zIndex: "10"
+            });
+            element.appendChild(ownerBadge);
         }
 
         if (cell.icon) {
