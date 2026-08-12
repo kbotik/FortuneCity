@@ -306,12 +306,13 @@ function movePlayer(steps, playerIndex, actionTurnId, onComplete) {
     if (!isActiveTurn(playerIndex, actionTurnId)) return;
 
     const player = players[playerIndex];
+    const totalSteps = Math.max(0, Math.floor(steps));
     let moved = 0;
 
     const moveOneStep = () => {
         if (!isActiveTurn(playerIndex, actionTurnId)) return;
 
-        if (moved >= steps) {
+        if (moved >= totalSteps) {
             updateBoard();
             updateMoney();
             setTimeout(() => {
@@ -334,6 +335,9 @@ function movePlayer(steps, playerIndex, actionTurnId, onComplete) {
         }
 
         moved += 1;
+        showMessage(
+            `🚶 ${player.name} avance : case ${moved}/${totalSteps}.`
+        );
         updateBoard();
         updateMoney();
         updatePlayers();
