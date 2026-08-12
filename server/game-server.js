@@ -80,25 +80,29 @@ function isOpen(socket) {
 class GameServer {
     constructor({
         maxPlayers = DEFAULT_MAX_PLAYERS,
-        reconnectGraceMs
+        reconnectGraceMs,
+        logger = console
     } = {}) {
         this.roomManager = new RoomManager({
             maxPlayers,
             reconnectGraceMs
         });
+        this.logger = logger;
     }
 
     attach(socket) {
         socket.on("message", data => this.receive(socket, data));
-        socket.on("close", () => this.disconnect(socket));
-        socket.on("error", () => this.disconnect(socket));
+        socket.on("close", () => {
+            this.disconnect(socket);
+        });
+        socket.on("error", error => {
+            this.logger.warn(`WebSocket error: ${error.message}`);
+            this.disconnect(socket);
+        });
     }
 
     receive(socket, data) {
-        if (
-            typeof data === "string" &&
-            Buffer.byteLength(data) > MAX_MESSAGE_BYTES
-        ) {
+        if (Buffer.byteLength(data.toString()) > MAX_MESSAGE_BYTES) {
             this.error(socket, "MESSAGE_TOO_LARGE", "Message trop volumineux.");
             return;
         }
@@ -136,7 +140,18 @@ class GameServer {
             END_TURN: () => this.endTurn(socket)
         };
 
-        handlers[message.type]();
+        try {
+            handlers[message.type]();
+        } catch (error) {
+            this.logger.error(
+                `Message ${message.type} failed: ${error.message}`
+            );
+            this.error(
+                socket,
+                "INTERNAL_ERROR",
+                "Le serveur n'a pas pu traiter cette action."
+            );
+        }
     }
 
     createRoom(socket, payload) {
@@ -151,6 +166,9 @@ class GameServer {
                 socket
             );
             this.bindSocket(socket, result.room, result.player);
+            this.logger.info(
+                `Room ${result.room.code} created by ${result.player.name}.`
+            );
             this.record(
                 result.room,
                 `🎮 ${result.player.name} crée la salle.`
@@ -182,6 +200,10 @@ class GameServer {
                 payload.reconnectToken
             );
             this.bindSocket(socket, result.room, result.player);
+            this.logger.info(
+                `${result.reconnected ? "Player reconnected" : "Player joined"} ` +
+                `${result.player.name} in room ${result.room.code}.`
+            );
 
             this.send(socket, "ROOM_JOINED", result.room, {
                 roomCode: result.room.code,
@@ -245,6 +267,10 @@ class GameServer {
             `🟢 ${player.name} est ` +
             `${player.ready ? "prêt" : "pas prêt"}.`
         );
+        this.logger.info(
+            `${player.name} is ${player.ready ? "ready" : "not ready"} ` +
+            `in room ${room.code}.`
+        );
         this.broadcast(room, "PLAYER_READY", {
             playerId: player.id,
             ready: player.ready
@@ -281,6 +307,7 @@ class GameServer {
         room.movementInProgress = false;
         room.winnerId = null;
         room.lastDice = null;
+        this.logger.info(`Game started in room ${room.code}.`);
         this.record(room, "🎮 La partie commence.");
         this.broadcast(room, "START_GAME", {
             currentPlayerId: room.currentPlayerId
@@ -766,6 +793,10 @@ class GameServer {
             room.status = "FINISHED";
             room.winnerId = remaining[0] ? remaining[0].id : null;
             room.currentPlayerId = null;
+            this.logger.info(
+                `Game finished in room ${room.code}: ` +
+                `${remaining[0] ? remaining[0].name : "no winner"}.`
+            );
             this.broadcast(room, "GAME_OVER", {
                 winnerId: room.winnerId,
                 winnerName: remaining[0] ? remaining[0].name : null
@@ -818,6 +849,7 @@ class GameServer {
     }
 
     error(socket, code, message) {
+        this.logger.warn(`${code}: ${message}`);
         this.send(socket, "ERROR", null, {code, message});
     }
 
@@ -825,7 +857,15 @@ class GameServer {
         const result = this.roomManager.disconnectSocket(socket);
         if (!result) return;
 
-        const {room, player} = result;
+        const {room, player, newHost} = result;
+        this.logger.info(
+            `${player.name} disconnected from room ${room.code}.`
+        );
+        if (newHost) {
+            this.logger.info(
+                `${newHost.name} is now host of room ${room.code}.`
+            );
+        }
         this.record(room, `🔴 ${player.name} est déconnecté.`);
         this.broadcast(room, "PLAYER_DISCONNECTED", {
             playerId: player.id,

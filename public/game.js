@@ -1439,6 +1439,9 @@ class OnlineClient {
         this.reconnectToken = null;
         this.localReady = false;
         this.roomState = null;
+        this.modeActive = false;
+        this.reconnectTimer = null;
+        this.reconnectAttempt = 0;
         this.controls = createOnlinePanel(this);
         this.wsUrl = this.getWebSocketUrl();
         this.connect();
@@ -1472,6 +1475,7 @@ class OnlineClient {
         }
 
         this.socket.addEventListener("open", () => {
+            this.reconnectAttempt = 0;
             this.setStatus("Connecté au serveur.");
             this.tryReconnect();
         });
@@ -1481,12 +1485,37 @@ class OnlineClient {
         );
         this.socket.addEventListener("close", () => {
             this.setStatus(
-                "Serveur déconnecté. Le mode local reste disponible."
+                this.modeActive
+                    ? "Connexion perdue. Reconnexion..."
+                    : "Serveur déconnecté. Le mode local reste disponible."
             );
+            if (this.modeActive || sessionStorage.getItem("fortunecity-online")) {
+                this.lockOnlineControls();
+                this.scheduleReconnect();
+            }
         });
         this.socket.addEventListener("error", () => {
-            this.setStatus("Erreur de connexion au serveur.");
+            this.setStatus(
+                this.modeActive
+                    ? "Connexion perdue. Reconnexion..."
+                    : "Serveur indisponible : mode local actif."
+            );
         });
+    }
+
+    scheduleReconnect() {
+        if (this.reconnectTimer || !this.wsUrl) return;
+
+        const delay = Math.min(
+            1000 * 2 ** this.reconnectAttempt,
+            10000
+        );
+        this.reconnectAttempt += 1;
+        this.reconnectTimer = setTimeout(() => {
+            this.reconnectTimer = null;
+            this.setStatus("Reconnexion...");
+            this.connect();
+        }, delay);
     }
 
     tryReconnect() {
@@ -1511,6 +1540,7 @@ class OnlineClient {
     send(type, payload = {}) {
         if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
             this.setStatus("Serveur indisponible.");
+            if (this.modeActive) this.lockOnlineControls();
             return false;
         }
 
@@ -1577,10 +1607,12 @@ class OnlineClient {
 
         const payload = message.payload || {};
         if (message.type === "ROOM_CREATED") {
+            this.modeActive = true;
             this.saveSession(payload);
             this.controls.roomInput.value = payload.roomCode;
             this.setStatus(`Salle créée : ${payload.roomCode}`);
         } else if (message.type === "ROOM_JOINED") {
+            this.modeActive = true;
             this.saveSession(payload);
             this.setStatus(
                 payload.reconnected
@@ -1588,8 +1620,12 @@ class OnlineClient {
                     : "Salle rejointe."
             );
         } else if (message.type === "ERROR") {
-            this.setStatus(payload.message || "Action refusée.");
-            showMessage(payload.message || "Action refusée.");
+            const errorMessage = this.friendlyError(
+                payload.code,
+                payload.message
+            );
+            this.setStatus(errorMessage);
+            showMessage(errorMessage);
         } else if (message.type === "DICE_RESULT") {
             showMessage(
                 `🎲 Résultat serveur : ${payload.dice1} + ` +
@@ -1610,6 +1646,30 @@ class OnlineClient {
 
     setStatus(text) {
         if (this.controls) this.controls.status.textContent = text;
+    }
+
+    friendlyError(code, fallback) {
+        const messages = {
+            ROOM_NOT_FOUND: "Salle introuvable.",
+            ROOM_FULL: "Salle complète.",
+            ROOM_LOCKED: "Partie déjà commencée.",
+            NOT_HOST: "Seul l’hôte peut lancer la partie.",
+            ACTION_NOT_ALLOWED: "Action non autorisée pendant ce tour.",
+            INVALID_JSON: "Message serveur invalide.",
+            MESSAGE_TOO_LARGE: "Message trop volumineux.",
+            NOT_IN_ROOM: "Joueur non connecté à une salle.",
+            INSUFFICIENT_FUNDS: "Argent insuffisant.",
+            INVALID_ROOM_CODE: "Code de salle invalide.",
+            NOT_ENOUGH_PLAYERS: "Il faut au moins deux joueurs.",
+            PLAYER_NOT_FOUND: "Joueur introuvable."
+        };
+
+        return messages[code] || fallback || "Action refusée.";
+    }
+
+    lockOnlineControls() {
+        if (rollButton) rollButton.disabled = true;
+        if (endTurnButton) endTurnButton.disabled = true;
     }
 
     renderRoom(roomState) {
@@ -1740,7 +1800,7 @@ if (typeof window !== "undefined") {
 if (rollButton) {
     rollButton.addEventListener(
         "click",
-        () => onlineClient
+        () => onlineClient && onlineClient.modeActive
             ? onlineClient.roll()
             : applyPlayerAction(gameState.currentPlayer, "roll")
     );
@@ -1749,7 +1809,7 @@ if (rollButton) {
 if (endTurnButton) {
     endTurnButton.addEventListener(
         "click",
-        () => onlineClient
+        () => onlineClient && onlineClient.modeActive
             ? onlineClient.endTurn()
             : applyPlayerAction(gameState.currentPlayer, "endTurn")
     );
@@ -1757,7 +1817,7 @@ if (endTurnButton) {
 
 if (newGameButton) {
     newGameButton.addEventListener("click", () => {
-        if (onlineClient) {
+        if (onlineClient && onlineClient.modeActive) {
             onlineClient.setStatus(
                 "En mode online, seule une nouvelle salle " +
                 "réinitialise la partie."

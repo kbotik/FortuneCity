@@ -5,6 +5,7 @@ const crypto = require("node:crypto");
 const ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const DEFAULT_MAX_PLAYERS = 4;
 const DEFAULT_RECONNECT_GRACE_MS = 5 * 60 * 1000;
+const ROOM_CODE_PATTERN = /^[A-Z2-9]{6}$/;
 
 function createRoomCode() {
     let code = "";
@@ -67,7 +68,12 @@ class RoomManager {
     }
 
     joinRoom(code, name, socket, playerId, reconnectToken) {
-        const room = this.rooms.get(String(code || "").trim().toUpperCase());
+        const normalizedCode = String(code || "").trim().toUpperCase();
+        if (!ROOM_CODE_PATTERN.test(normalizedCode)) {
+            throw new Error("INVALID_ROOM_CODE");
+        }
+
+        const room = this.rooms.get(normalizedCode);
         if (!room) throw new Error("ROOM_NOT_FOUND");
 
         if (playerId && reconnectToken) {
@@ -142,8 +148,8 @@ class RoomManager {
             player.socket = null;
             player.connected = false;
             player.disconnectedAt = Date.now();
-            this.reassignHost(room, player.id);
-            return {room, player};
+            const newHost = this.reassignHost(room, player.id);
+            return {room, player, newHost};
         }
 
         return null;

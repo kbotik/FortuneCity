@@ -4,9 +4,23 @@ const http = require("node:http");
 const {WebSocketServer} = require("ws");
 const {GameServer} = require("./game-server");
 
-const PORT = Number(process.env.PORT || 8080);
-const CORS_ORIGIN = process.env.CORS_ORIGIN || "*";
-const MAX_PLAYERS = Number(process.env.MAX_PLAYERS || 4);
+const DEFAULT_PORT = 8080;
+const DEFAULT_MAX_PLAYERS = 4;
+const DEFAULT_CORS_ORIGIN = "https://kbotik.github.io";
+
+const parsedPort = Number(process.env.PORT);
+const parsedMaxPlayers = Number(process.env.MAX_PLAYERS);
+const PORT = Number.isInteger(parsedPort) && parsedPort > 0
+    ? parsedPort
+    : DEFAULT_PORT;
+const MAX_PLAYERS =
+    Number.isInteger(parsedMaxPlayers) &&
+    parsedMaxPlayers >= 2 &&
+    parsedMaxPlayers <= DEFAULT_MAX_PLAYERS
+        ? parsedMaxPlayers
+        : DEFAULT_MAX_PLAYERS;
+const CORS_ORIGIN =
+    process.env.CORS_ORIGIN || DEFAULT_CORS_ORIGIN;
 
 const gameServer = new GameServer({maxPlayers: MAX_PLAYERS});
 
@@ -21,9 +35,15 @@ function isAllowedOrigin(origin) {
 }
 
 const httpServer = http.createServer((request, response) => {
-    if (request.url === "/health") {
+    const requestUrl = new URL(
+        request.url || "/",
+        `http://${request.headers.host || "localhost"}`
+    );
+
+    if (requestUrl.pathname === "/health") {
         response.writeHead(200, {"content-type": "application/json"});
         response.end(JSON.stringify({
+            status: "ok",
             ok: true,
             service: "fortunecity-game-server",
             rooms: gameServer.roomManager.rooms.size
@@ -49,6 +69,7 @@ const webSocketServer = new WebSocketServer({
 });
 
 webSocketServer.on("connection", socket => {
+    console.log("WebSocket client connected.");
     gameServer.attach(socket);
 });
 
@@ -60,12 +81,20 @@ httpServer.listen(PORT, "0.0.0.0", () => {
 });
 
 function shutdown() {
+    console.log("Stopping FortuneCity server...");
+
     for (const room of gameServer.roomManager.rooms.values()) {
         gameServer.roomManager.clearRoomTimers(room);
+        room.players.forEach(player => {
+            if (player.socket && player.socket.readyState === 1) {
+                player.socket.close(1001, "Server shutdown");
+            }
+        });
     }
 
-    webSocketServer.close();
-    httpServer.close(() => process.exit(0));
+    webSocketServer.close(() => {
+        httpServer.close(() => process.exit(0));
+    });
 }
 
 process.on("SIGINT", shutdown);
