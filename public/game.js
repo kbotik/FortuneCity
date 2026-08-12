@@ -45,6 +45,7 @@ const players = [
         money: START_MONEY,
         position: 0,
         properties: [],
+        inPrison: false,
         bankrupt: false
     },
     {
@@ -53,6 +54,7 @@ const players = [
         money: START_MONEY,
         position: 0,
         properties: [],
+        inPrison: false,
         bankrupt: false
     }
 ];
@@ -502,7 +504,9 @@ function movePlayer(steps, playerIndex, actionTurnId, onComplete) {
         }
 
         const previousPosition = player.position;
-        const leavingPrison = previousPosition === PRISON_POSITION;
+        const leavingPrison =
+            player.inPrison &&
+            previousPosition === PRISON_POSITION;
         player.position = (player.position + 1) % cellsData.length;
 
         if (player.position === 0 && previousPosition !== 0) {
@@ -515,6 +519,7 @@ function movePlayer(steps, playerIndex, actionTurnId, onComplete) {
 
         moved += 1;
         if (leavingPrison) {
+            player.inPrison = false;
             showMessage(
                 `🚪 ${player.name} sort de la prison et ` +
                 `reprend son déplacement.`
@@ -564,6 +569,10 @@ function resolveCell(playerIndex, actionTurnId) {
     if (cell.type === "chance") {
         drawChance(playerIndex, actionTurnId);
         return;
+    }
+
+    if (cell.type === "jail") {
+        player.inPrison = true;
     }
 
     const messages = {
@@ -879,6 +888,7 @@ function resetPlayerState(player) {
     player.money = START_MONEY;
     player.position = 0;
     player.properties = [];
+    player.inPrison = false;
     player.bankrupt = false;
 }
 
