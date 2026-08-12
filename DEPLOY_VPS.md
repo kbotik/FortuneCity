@@ -13,15 +13,15 @@ https://fortunecityplay.fr
   ↓
 Client FortuneCity publié sur GitHub Pages/LWS
   ↓
-wss://SOUS_DOMAINE_WS_A_DEFINIR
+wss://ws.fortunecityplay.fr
   ↓
 Nginx sur le VPS
   ↓
 serveur Node.js FortuneCity
 ```
 
-Le sous-domaine WebSocket sera choisi ultérieurement. Le placeholder
-`SOUS_DOMAINE_WS_A_DEFINIR` ne doit pas être utilisé comme domaine réel.
+Le VPS fourni pour cette préparation est `213.156.133.35` et le sous-domaine
+WebSocket prévu est `ws.fortunecityplay.fr`.
 
 ## A. Installation système
 
@@ -84,7 +84,7 @@ NODE_ENV=production
 PORT=8080
 MAX_PLAYERS=4
 CORS_ORIGIN=https://fortunecityplay.fr
-FORTUNECITY_WS_URL=
+FORTUNECITY_WS_URL=wss://ws.fortunecityplay.fr
 ```
 
 Variables réellement utilisées par le projet :
@@ -93,14 +93,14 @@ Variables réellement utilisées par le projet :
 - `PORT` : port HTTP/WebSocket interne, `8080` par défaut ;
 - `MAX_PLAYERS` : maximum de joueurs, limité à 4 par le serveur ;
 - `CORS_ORIGIN` : origines autorisées, notamment `https://fortunecityplay.fr` ;
-- `FORTUNECITY_WS_URL` : configuration du client statique, laissée vide tant
-  que le sous-domaine réel n’est pas choisi.
+- `FORTUNECITY_WS_URL` : configuration du client statique, correspondant à
+  l’endpoint public WSS prévu.
 
 Le fichier `.env` est ignoré par Git. Ne jamais y mettre de mot de passe, clé,
 token ou certificat.
 
-Le serveur écoute sur `0.0.0.0:$PORT`. Nginx lui transmettra les requêtes via
-`127.0.0.1:8080`, et le firewall ne doit pas exposer directement le port
+Le serveur écoute sur `127.0.0.1:$PORT`. Nginx lui transmettra les requêtes
+via `127.0.0.1:8080`, et le firewall ne doit pas exposer directement le port
 `8080`.
 
 ## F. Tests et démarrage manuel
@@ -193,13 +193,13 @@ sudo apt install -y nginx
 sudo nano /etc/nginx/sites-available/fortunecity
 ```
 
-Remplacer `SOUS_DOMAINE_WS_A_DEFINIR` uniquement après avoir choisi le vrai
-sous-domaine :
+Le DNS doit pointer `ws.fortunecityplay.fr` vers `213.156.133.35` avant
+d’activer HTTPS :
 
 ```nginx
 server {
     listen 80;
-    server_name SOUS_DOMAINE_WS_A_DEFINIR;
+    server_name ws.fortunecityplay.fr;
 
     location / {
         proxy_pass http://127.0.0.1:8080;
@@ -224,13 +224,27 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-## I. HTTPS et WSS
+## I. DNS, HTTPS et WSS
 
-Après configuration DNS du vrai sous-domaine :
+Créer l’enregistrement DNS suivant chez le fournisseur DNS :
+
+```text
+Type : A
+Nom  : ws
+Valeur : 213.156.133.35
+```
+
+Vérifier la résolution avant Certbot :
+
+```bash
+dig +short ws.fortunecityplay.fr
+```
+
+La réponse attendue est `213.156.133.35`. Après propagation DNS :
 
 ```bash
 sudo apt install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d SOUS_DOMAINE_WS_A_DEFINIR
+sudo certbot --nginx -d ws.fortunecityplay.fr
 sudo nginx -t
 sudo systemctl reload nginx
 ```
@@ -238,8 +252,8 @@ sudo systemctl reload nginx
 Le résultat attendu sera :
 
 ```text
-https://SOUS_DOMAINE_WS_A_DEFINIR
-wss://SOUS_DOMAINE_WS_A_DEFINIR
+https://ws.fortunecityplay.fr
+wss://ws.fortunecityplay.fr
 ```
 
 Le serveur Node reste en HTTP local sur `127.0.0.1:8080`; TLS est terminé par
@@ -253,9 +267,10 @@ Le site officiel reste :
 https://fortunecityplay.fr
 ```
 
-Après le choix et la configuration du vrai sous-domaine, renseigner l’URL
-`wss://` réelle via `FORTUNECITY_WS_URL` dans la configuration statique du
-client. Tant qu’elle est vide, le mode local reste disponible.
+Renseigner `wss://ws.fortunecityplay.fr` via `FORTUNECITY_WS_URL` dans la
+configuration statique du client. Cette valeur non secrète est déjà indiquée
+dans `.env.example` et la meta du client. Le mode local reste disponible si
+le serveur est indisponible.
 
 Ne jamais activer `ws://` depuis une page HTTPS. Le paramètre `?ws=` est
 réservé aux tests et ne remplace pas une configuration de production.
@@ -316,8 +331,7 @@ Tester ensuite :
 ## M. Vérification depuis deux téléphones
 
 1. Publier le client sur `https://fortunecityplay.fr`.
-2. Configurer le vrai `wss://SOUS_DOMAINE_WS_A_DEFINIR` après choix du
-   sous-domaine.
+2. Configurer `wss://ws.fortunecityplay.fr`.
 3. Ouvrir le site sur deux téléphones.
 4. Créer une salle sur le premier téléphone.
 5. Partager le code réel.
@@ -327,7 +341,7 @@ Tester ensuite :
 9. Vérifier :
 
 ```bash
-curl https://SOUS_DOMAINE_WS_A_DEFINIR/health
+curl https://ws.fortunecityplay.fr/health
 sudo journalctl -u fortunecity -f
 ```
 

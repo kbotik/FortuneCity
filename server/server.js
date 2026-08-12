@@ -90,7 +90,7 @@ webSocketServer.on("connection", socket => {
     gameServer.attach(socket);
 });
 
-httpServer.listen(PORT, "0.0.0.0", () => {
+httpServer.listen(PORT, "127.0.0.1", () => {
     console.log(
         `FortuneCity server listening on port ${PORT} ` +
         `(NODE_ENV=${NODE_ENV}, CORS_ORIGIN=${CORS_ORIGIN})`

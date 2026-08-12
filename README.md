@@ -16,7 +16,7 @@ Ouvrir ensuite <http://localhost:4173/>.
 
 1. Dans **Settings → Pages**, choisir **GitHub Actions** comme source de publication.
 2. Pousser une modification sur `main`, ou lancer manuellement le workflow **Déployer FortuneCity sur GitHub Pages** depuis l’onglet **Actions**.
-3. Ouvrir <https://kbotik.github.io/FortuneCity/>.
+3. Ouvrir <https://fortunecityplay.fr>.
 
 Le workflow publie directement le contenu de `public/` : aucun build ni dépendance npm n’est nécessaire.
 
@@ -48,7 +48,7 @@ En production, utiliser par exemple :
 
 ```bash
 PORT=8080 MAX_PLAYERS=4 \
-  CORS_ORIGIN="https://kbotik.github.io" npm start
+  CORS_ORIGIN="https://fortunecityplay.fr" npm start
 ```
 
 Pour tester le mode online dans un navigateur local, ouvrir :
@@ -63,7 +63,7 @@ Pour utiliser GitHub Pages avec plusieurs appareils, le serveur WebSocket doit �
 
 Le serveur Node n’embarque pas TLS lui-même : en production, placer un proxy HTTPS/TLS devant lui et utiliser `wss://` côté navigateur. Le endpoint `/health` permet au fournisseur d’hébergement de vérifier que le processus répond.
 
-Le client lit aussi la configuration `FORTUNECITY_WS_URL` depuis la balise meta de `public/index.html` ou depuis `window.FORTUNECITY_WS_URL`. Elle est volontairement vide dans le dépôt tant qu’aucune URL publique réelle n’existe. Le paramètre d’URL `?ws=` reste disponible pour les tests et ne doit pas utiliser `ws://` depuis une page HTTPS.
+Le client lit aussi la configuration `FORTUNECITY_WS_URL` depuis la balise meta de `public/index.html` ou depuis `window.FORTUNECITY_WS_URL`. La configuration actuelle vise `wss://ws.fortunecityplay.fr`; le paramètre d’URL `?ws=` reste disponible pour les tests et ne doit pas utiliser `ws://` depuis une page HTTPS.
 
 ## Déployer le serveur sur un VPS
 
@@ -78,7 +78,7 @@ npm ci --omit=dev
 NODE_ENV=production \
 PORT=8080 \
 MAX_PLAYERS=4 \
-CORS_ORIGIN="https://kbotik.github.io" \
+CORS_ORIGIN="https://fortunecityplay.fr" \
 npm start
 ```
 
@@ -88,12 +88,12 @@ Vérifier le processus avec :
 curl http://127.0.0.1:8080/health
 ```
 
-Le serveur écoute sur `0.0.0.0` et peut donc être placé derrière un reverse proxy HTTPS. Exemple Nginx avec un domaine à remplacer :
+Le serveur écoute sur `127.0.0.1:8080` derrière un reverse proxy HTTPS :
 
 ```nginx
 server {
     listen 80;
-    server_name SERVER_DOMAIN;
+    server_name ws.fortunecityplay.fr;
 
     location / {
         proxy_pass http://127.0.0.1:8080;
@@ -111,7 +111,7 @@ Après configuration DNS, installer le certificat sans modifier le dépôt :
 
 ```bash
 sudo apt install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d SERVER_DOMAIN
+sudo certbot --nginx -d ws.fortunecityplay.fr
 ```
 
-Le client GitHub Pages devra alors recevoir l’URL réelle `wss://SERVER_DOMAIN`, via `FORTUNECITY_WS_URL` dans la configuration statique ou via `?ws=`. Aucun domaine fictif n’est configuré ici. `FORTUNECITY_WS_URL` est une configuration client et ne contient aucun secret.
+Le client GitHub Pages utilise `wss://ws.fortunecityplay.fr` via `FORTUNECITY_WS_URL`. Aucun secret n’est contenu dans cette URL.
