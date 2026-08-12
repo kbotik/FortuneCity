@@ -1351,9 +1351,13 @@ function createOnlinePanel(client) {
     status.style.marginBottom = "8px";
 
     nameInput.placeholder = "Pseudo";
+    nameInput.id = "onlinePlayerName";
+    nameInput.name = "onlinePlayerName";
     nameInput.value = "Joueur";
     nameInput.maxLength = 24;
     roomInput.placeholder = "Code de salle";
+    roomInput.id = "onlineRoomCode";
+    roomInput.name = "onlineRoomCode";
     roomInput.maxLength = 6;
 
     [nameInput, roomInput].forEach(input => {
