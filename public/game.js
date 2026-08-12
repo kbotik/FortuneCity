@@ -156,7 +156,7 @@ function renderHistory() {
     if (!logElement) return;
 
     logElement.replaceChildren();
-    [...gameState.history].reverse().forEach(appendLogEntry);
+    gameState.history.forEach(appendLogEntry);
 }
 
 function log(text) {
@@ -1132,6 +1132,25 @@ function exportGameState() {
     return JSON.stringify(getSerializableState());
 }
 
+function normalizeHistoryEntry(entry) {
+    if (
+        !entry ||
+        typeof entry.text !== "string" ||
+        typeof entry.timestamp !== "string"
+    ) {
+        return null;
+    }
+
+    const date = new Date(entry.timestamp);
+    if (Number.isNaN(date.getTime())) return null;
+
+    return {
+        id: String(entry.id || `${Date.now()}-${historySequence++}`),
+        timestamp: date.toISOString(),
+        text: entry.text
+    };
+}
+
 function normalizeImportedPlayer(player) {
     if (
         !player ||
@@ -1214,16 +1233,8 @@ function importGameState(snapshot) {
         : null;
     gameState.history = Array.isArray(parsed.history)
         ? parsed.history
-            .filter(entry =>
-                entry &&
-                typeof entry.text === "string" &&
-                typeof entry.timestamp === "string"
-            )
-            .map(entry => ({
-                id: String(entry.id || `${Date.now()}-${historySequence++}`),
-                timestamp: entry.timestamp,
-                text: entry.text
-            }))
+            .map(normalizeHistoryEntry)
+            .filter(entry => entry !== null)
         : [];
 
     updateAction();
