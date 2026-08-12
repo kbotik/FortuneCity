@@ -38,34 +38,6 @@ const PLAYER_TOKEN_STYLES = [
     }
 ];
 
-const players = [
-    {
-        name: "Joueur 1",
-        emoji: "👨‍💼",
-        money: START_MONEY,
-        position: 0,
-        properties: [],
-        inPrison: false,
-        bankrupt: false
-    },
-    {
-        name: "Joueur 2",
-        emoji: "👩‍💼",
-        money: START_MONEY,
-        position: 0,
-        properties: [],
-        inPrison: false,
-        bankrupt: false
-    }
-];
-
-let currentPlayer = 0;
-let rolling = false;
-let movementInProgress = false;
-let gameOver = false;
-let turnId = 0;
-let diceAnimationTimer = null;
-
 const cellsData = [
     {type: "start", name: "DÉPART", icon: "🚩"},
     {type: "property", name: "Rue 1", price: 100},
@@ -114,38 +86,97 @@ const PRISON_POSITION = cellsData.findIndex(
     cell => cell.type === "jail"
 );
 
+function createInitialPlayers() {
+    return [
+        {
+            name: "Joueur 1",
+            emoji: "👨‍💼",
+            money: START_MONEY,
+            position: 0,
+            properties: [],
+            inPrison: false,
+            bankrupt: false
+        },
+        {
+            name: "Joueur 2",
+            emoji: "👩‍💼",
+            money: START_MONEY,
+            position: 0,
+            properties: [],
+            inPrison: false,
+            bankrupt: false
+        }
+    ];
+}
+
+const gameState = {
+    players: createInitialPlayers(),
+    currentPlayer: 0,
+    rolling: false,
+    movementInProgress: false,
+    gameOver: false,
+    winnerIndex: null,
+    lastDice: null,
+    history: [],
+    turnId: 0
+};
+
+let historySequence = 0;
+let diceAnimationTimer = null;
+
 function formatMoney(amount) {
     return `${amount.toLocaleString("fr-FR")} €`;
 }
 
-function log(text) {
+function appendLogEntry(entry) {
     if (!logElement) return;
 
     const line = document.createElement("div");
     const timestamp = document.createElement("time");
-    const message = document.createElement("span");
-    const now = new Date();
+    const text = document.createElement("span");
+    const date = new Date(entry.timestamp);
 
     line.className = "log-line";
-    timestamp.dateTime = now.toISOString();
-    timestamp.textContent = now.toLocaleTimeString("fr-FR", {
+    timestamp.dateTime = date.toISOString();
+    timestamp.textContent = date.toLocaleTimeString("fr-FR", {
         hour: "2-digit",
         minute: "2-digit",
         second: "2-digit"
     });
     timestamp.style.marginRight = "8px";
     timestamp.style.opacity = "0.7";
-    timestamp.title = now.toLocaleString("fr-FR");
-    message.textContent = text;
+    timestamp.title = date.toLocaleString("fr-FR");
+    text.textContent = entry.text;
 
-    line.append(timestamp, message);
+    line.append(timestamp, text);
     logElement.prepend(line);
+}
+
+function renderHistory() {
+    if (!logElement) return;
+
+    logElement.replaceChildren();
+    [...gameState.history].reverse().forEach(appendLogEntry);
+}
+
+function log(text) {
+    const entry = {
+        id: `${Date.now()}-${historySequence++}`,
+        timestamp: new Date().toISOString(),
+        text: String(text)
+    };
+
+    gameState.history.push(entry);
+    appendLogEntry(entry);
 }
 
 function updateMoney() {
     if (!moneyElement) return;
 
-    moneyElement.textContent = players[currentPlayer].money.toLocaleString("fr-FR");
+    const player = gameState.players[gameState.currentPlayer];
+    if (player) {
+        moneyElement.textContent = player.money.toLocaleString("fr-FR");
+    }
 }
 
 function updatePlayers() {
@@ -153,11 +184,11 @@ function updatePlayers() {
 
     playersElement.replaceChildren();
 
-    players.forEach((player, index) => {
+    gameState.players.forEach((player, index) => {
         const box = document.createElement("div");
         box.className = "player-card";
 
-        if (index === currentPlayer) {
+        if (index === gameState.currentPlayer) {
             box.classList.add("active");
         }
 
@@ -190,9 +221,56 @@ function updatePlayers() {
 function getPropertyOwnerIndex(cell) {
     if (cell.type !== "property") return -1;
 
-    return players.findIndex(player =>
+    return gameState.players.findIndex(player =>
         player.properties.includes(cell.name)
     );
+}
+
+function stylePlayerToken(token, player, playerIndex) {
+    const visual = PLAYER_TOKEN_STYLES[
+        playerIndex % PLAYER_TOKEN_STYLES.length
+    ];
+
+    Object.assign(token.style, {
+        ...visual,
+        alignItems: "center",
+        bottom: "4px",
+        boxShadow: "0 2px 6px rgba(0, 0, 0, .45)",
+        boxSizing: "border-box",
+        color: "#ffffff",
+        display: "flex",
+        fontSize: "clamp(16px, 3.5vw, 28px)",
+        fontWeight: "900",
+        height: "clamp(28px, 7vw, 42px)",
+        justifyContent: "center",
+        lineHeight: "1",
+        outline: "2px solid rgba(15, 23, 42, .75)",
+        right: `${4 + playerIndex * 27}px`,
+        textShadow: "0 1px 2px rgba(0, 0, 0, .65)",
+        width: "clamp(28px, 7vw, 42px)"
+    });
+
+    token.textContent = player.emoji;
+    token.title = `Pion de ${player.name}`;
+    token.setAttribute("aria-label", `Pion de ${player.name}`);
+
+    if (
+        playerIndex === gameState.currentPlayer &&
+        typeof token.animate === "function"
+    ) {
+        token.animate(
+            [
+                {transform: "translateY(5px) scale(.82)"},
+                {transform: "translateY(-3px) scale(1.08)"},
+                {transform: "translateY(0) scale(1)"}
+            ],
+            {
+                duration: MOVE_STEP_DELAY,
+                easing: "ease-out",
+                fill: "both"
+            }
+        );
+    }
 }
 
 function createBoard() {
@@ -205,7 +283,7 @@ function createBoard() {
         element.className = `cell cell-${cell.type}`;
         element.dataset.position = index;
 
-        if (players[currentPlayer].position === index) {
+        if (gameState.players[gameState.currentPlayer].position === index) {
             element.classList.add("active");
         }
 
@@ -215,15 +293,14 @@ function createBoard() {
                 PLAYER_COLORS[ownerIndex % PLAYER_COLORS.length];
 
             element.classList.add("property-owned");
-            element.style.setProperty(
-                "--owner-color",
-                ownerColor
-            );
-            element.title = `Propriété de ${players[ownerIndex].name}`;
+            element.style.setProperty("--owner-color", ownerColor);
+            element.title =
+                `Propriété de ${gameState.players[ownerIndex].name}`;
 
             const ownerBadge = document.createElement("span");
             ownerBadge.className = "cell-owner";
-            ownerBadge.textContent = `👤 ${players[ownerIndex].name}`;
+            ownerBadge.textContent =
+                `👤 ${gameState.players[ownerIndex].name}`;
             Object.assign(ownerBadge.style, {
                 backgroundColor: ownerColor,
                 borderRadius: "6px",
@@ -262,7 +339,7 @@ function createBoard() {
             element.appendChild(price);
         }
 
-        const tokens = players
+        const tokens = gameState.players
             .map((player, playerIndex) => ({player, playerIndex}))
             .filter(({player}) => player.position === index);
 
@@ -290,53 +367,6 @@ function updateBoard() {
     createBoard();
 }
 
-function stylePlayerToken(token, player, playerIndex) {
-    const visual = PLAYER_TOKEN_STYLES[
-        playerIndex % PLAYER_TOKEN_STYLES.length
-    ];
-
-    Object.assign(token.style, {
-        ...visual,
-        alignItems: "center",
-        bottom: "4px",
-        boxShadow: "0 2px 6px rgba(0, 0, 0, .45)",
-        boxSizing: "border-box",
-        color: "#ffffff",
-        display: "flex",
-        fontSize: "clamp(16px, 3.5vw, 28px)",
-        fontWeight: "900",
-        height: "clamp(28px, 7vw, 42px)",
-        justifyContent: "center",
-        lineHeight: "1",
-        outline: "2px solid rgba(15, 23, 42, .75)",
-        right: `${4 + playerIndex * 27}px`,
-        textShadow: "0 1px 2px rgba(0, 0, 0, .65)",
-        width: "clamp(28px, 7vw, 42px)"
-    });
-
-    token.textContent = player.emoji;
-    token.title = `Pion de ${player.name}`;
-    token.setAttribute("aria-label", `Pion de ${player.name}`);
-
-    if (
-        playerIndex === currentPlayer &&
-        typeof token.animate === "function"
-    ) {
-        token.animate(
-            [
-                {transform: "translateY(5px) scale(.82)"},
-                {transform: "translateY(-3px) scale(1.08)"},
-                {transform: "translateY(0) scale(1)"}
-            ],
-            {
-                duration: MOVE_STEP_DELAY,
-                easing: "ease-out",
-                fill: "both"
-            }
-        );
-    }
-}
-
 function showMessage(text) {
     if (message) {
         message.textContent = text;
@@ -359,16 +389,90 @@ function addActionButton(label, className, handler) {
     actionElement.appendChild(button);
 }
 
-function rollDie() {
-    return Math.floor(Math.random() * 6) + 1;
+function getPlayer(playerIndex) {
+    return gameState.players[playerIndex] || null;
+}
+
+function isPlayerTurn(playerIndex) {
+    const player = getPlayer(playerIndex);
+
+    return Boolean(
+        player &&
+        !player.bankrupt &&
+        !gameState.gameOver &&
+        gameState.currentPlayer === playerIndex
+    );
+}
+
+function isActionAllowed(playerIndex, actionType) {
+    if (!isPlayerTurn(playerIndex)) return false;
+
+    if (actionType === "roll" || actionType === "endTurn") {
+        return !gameState.rolling && !gameState.movementInProgress;
+    }
+
+    if (
+        actionType === "buyProperty" ||
+        actionType === "skipProperty"
+    ) {
+        return gameState.rolling && gameState.movementInProgress;
+    }
+
+    if (actionType === "movement" || actionType === "resolveCell") {
+        return gameState.rolling && gameState.movementInProgress;
+    }
+
+    return false;
 }
 
 function isActiveTurn(playerIndex, actionTurnId) {
     return (
-        !gameOver &&
-        currentPlayer === playerIndex &&
-        turnId === actionTurnId
+        isPlayerTurn(playerIndex) &&
+        gameState.turnId === actionTurnId
     );
+}
+
+function creditMoney(playerIndex, amount) {
+    const player = getPlayer(playerIndex);
+    if (!player || !Number.isFinite(amount) || amount < 0) {
+        return false;
+    }
+
+    player.money += amount;
+    return true;
+}
+
+function debitMoney(playerIndex, amount) {
+    const player = getPlayer(playerIndex);
+    if (!player || !Number.isFinite(amount) || amount < 0) {
+        return false;
+    }
+
+    player.money -= amount;
+    return true;
+}
+
+function transferMoney(fromPlayerIndex, toPlayerIndex, amount) {
+    const fromPlayer = getPlayer(fromPlayerIndex);
+    const toPlayer = getPlayer(toPlayerIndex);
+
+    if (
+        !fromPlayer ||
+        !toPlayer ||
+        fromPlayerIndex === toPlayerIndex ||
+        !Number.isFinite(amount) ||
+        amount < 0
+    ) {
+        return false;
+    }
+
+    fromPlayer.money -= amount;
+    toPlayer.money += amount;
+    return true;
+}
+
+function rollDie() {
+    return Math.floor(Math.random() * 6) + 1;
 }
 
 function clearDiceAnimation() {
@@ -388,7 +492,7 @@ function animateDice(
     let animationStep = 0;
 
     const animateFrame = () => {
-        if (!isActiveTurn(playerIndex, actionTurnId) || !rolling) {
+        if (!isActiveTurn(playerIndex, actionTurnId) || !gameState.rolling) {
             clearDiceAnimation();
             return;
         }
@@ -420,28 +524,35 @@ function animateDice(
     animateFrame();
 }
 
-function rollDice() {
-    if (rolling || movementInProgress || gameOver) return;
+function passStart(playerIndex) {
+    if (!creditMoney(playerIndex, PASS_START_BONUS)) return false;
 
-    rolling = true;
-    movementInProgress = true;
-    turnId += 1;
+    const player = getPlayer(playerIndex);
+    log(
+        `🚩 ${player.name} passe par le départ et reçoit ` +
+        `${formatMoney(PASS_START_BONUS)}.`
+    );
+    return true;
+}
 
-    const playerIndex = currentPlayer;
-    const actionTurnId = turnId;
-    const player = players[playerIndex];
+function rollDice(playerIndex = gameState.currentPlayer) {
+    if (!isActionAllowed(playerIndex, "roll")) return false;
+
+    gameState.rolling = true;
+    gameState.movementInProgress = true;
+    gameState.turnId += 1;
+
+    const actionTurnId = gameState.turnId;
+    const player = getPlayer(playerIndex);
     const die1 = rollDie();
     const die2 = rollDie();
     const total = die1 + die2;
 
-    if (rollButton) {
-        rollButton.disabled = true;
-    }
-    if (endTurnButton) {
-        endTurnButton.disabled = true;
-    }
-    updateAction();
+    gameState.lastDice = {die1, die2, total};
 
+    if (rollButton) rollButton.disabled = true;
+    if (endTurnButton) endTurnButton.disabled = true;
+    updateAction();
     showMessage(`${player.emoji} ${player.name} lance les dés...`);
 
     animateDice(
@@ -469,19 +580,27 @@ function rollDice() {
             );
         }
     );
+
+    return true;
 }
 
-function movePlayer(steps, playerIndex, actionTurnId, onComplete) {
-    if (!isActiveTurn(playerIndex, actionTurnId)) return;
+function movePlayer(
+    steps,
+    playerIndex,
+    actionTurnId,
+    onComplete
+) {
+    if (!isActionAllowed(playerIndex, "movement")) return false;
+    if (gameState.turnId !== actionTurnId) return false;
 
-    const player = players[playerIndex];
+    const player = getPlayer(playerIndex);
     const totalSteps = Math.max(0, Math.floor(steps));
     let moved = 0;
 
     const finishMovement = () => {
         if (
             !isActiveTurn(playerIndex, actionTurnId) ||
-            !movementInProgress
+            !gameState.movementInProgress
         ) {
             return;
         }
@@ -507,14 +626,11 @@ function movePlayer(steps, playerIndex, actionTurnId, onComplete) {
         const leavingPrison =
             player.inPrison &&
             previousPosition === PRISON_POSITION;
+
         player.position = (player.position + 1) % cellsData.length;
 
         if (player.position === 0 && previousPosition !== 0) {
-            player.money += PASS_START_BONUS;
-            log(
-                `🚩 ${player.name} passe par le départ et reçoit ` +
-                `${formatMoney(PASS_START_BONUS)}.`
-            );
+            passStart(playerIndex);
         }
 
         moved += 1;
@@ -530,6 +646,7 @@ function movePlayer(steps, playerIndex, actionTurnId, onComplete) {
                 `🚶 ${player.name} avance : case ${moved}/${totalSteps}.`
             );
         }
+
         updateBoard();
         updateMoney();
         updatePlayers();
@@ -542,55 +659,79 @@ function movePlayer(steps, playerIndex, actionTurnId, onComplete) {
     };
 
     setTimeout(moveOneStep, MOVE_STEP_DELAY);
+    return true;
 }
 
 function resolveCell(playerIndex, actionTurnId) {
-    if (!isActiveTurn(playerIndex, actionTurnId)) return;
+    if (!isActiveTurn(playerIndex, actionTurnId)) return false;
 
-    const player = players[playerIndex];
+    const player = getPlayer(playerIndex);
     const cell = cellsData[player.position];
     updateAction();
 
     if (cell.type === "property") {
-        handleProperty(cell, playerIndex, actionTurnId);
-        return;
+        return handleProperty(cell, playerIndex, actionTurnId);
     }
 
     if (cell.type === "tax") {
-        payTax(cell.amount, playerIndex, actionTurnId);
-        return;
+        return payTax(cell.amount, playerIndex, actionTurnId);
     }
 
     if (cell.type === "bonus") {
-        receiveBonus(playerIndex, actionTurnId);
-        return;
+        return receiveBonus(playerIndex, actionTurnId);
     }
 
     if (cell.type === "chance") {
-        drawChance(playerIndex, actionTurnId);
-        return;
+        return drawChance(playerIndex, actionTurnId);
     }
 
     if (cell.type === "jail") {
-        player.inPrison = true;
+        return handlePrison(playerIndex, actionTurnId);
     }
 
-    const messages = {
-        jail: "🚓 Tu entres sur la case Prison. " +
-            "Tu es simplement de passage et tu n'es pas bloqué.",
-        station: "🚂 Gare ! Rien à payer.",
-        parking: "🅿️ Parking gratuit.",
-        start: "🚩 Tu es sur le départ."
-    };
+    if (cell.type === "station") {
+        return handleStation(playerIndex, actionTurnId);
+    }
 
-    showMessage(messages[cell.type] || "Bonne continuation !");
+    if (cell.type === "parking") {
+        return handleParking(playerIndex, actionTurnId);
+    }
+
+    return handleStart(playerIndex, actionTurnId);
+}
+
+function handleStart(playerIndex, actionTurnId) {
+    showMessage("🚩 Tu es sur le départ.");
     finishRoll(playerIndex, actionTurnId);
+    return true;
+}
+
+function handleStation(playerIndex, actionTurnId) {
+    showMessage("🚂 Gare ! Rien à payer.");
+    finishRoll(playerIndex, actionTurnId);
+    return true;
+}
+
+function handleParking(playerIndex, actionTurnId) {
+    showMessage("🅿️ Parking gratuit.");
+    finishRoll(playerIndex, actionTurnId);
+    return true;
+}
+
+function handlePrison(playerIndex, actionTurnId) {
+    const player = getPlayer(playerIndex);
+    player.inPrison = true;
+    showMessage(
+        "🚓 Tu entres sur la case Prison. " +
+        "Tu es simplement de passage et tu n'es pas bloqué."
+    );
+    finishRoll(playerIndex, actionTurnId);
+    return true;
 }
 
 function handleProperty(cell, playerIndex, actionTurnId) {
-    if (!isActiveTurn(playerIndex, actionTurnId)) return;
+    if (!isActiveTurn(playerIndex, actionTurnId)) return false;
 
-    const player = players[playerIndex];
     const ownerIndex = getPropertyOwnerIndex(cell);
 
     if (ownerIndex === -1) {
@@ -599,65 +740,55 @@ function handleProperty(cell, playerIndex, actionTurnId) {
         addActionButton(
             `🏠 Acheter pour ${formatMoney(cell.price)}`,
             "buy-button",
-            () => buyProperty(cell, playerIndex, actionTurnId)
+            () => applyPlayerAction(
+                playerIndex,
+                "buyProperty",
+                {cell, actionTurnId}
+            )
         );
         addActionButton(
             "⏭️ Ne pas acheter",
             "skip-button",
-            () => finishRoll(playerIndex, actionTurnId)
+            () => applyPlayerAction(
+                playerIndex,
+                "skipProperty",
+                {actionTurnId}
+            )
         );
-        return;
+        return true;
     }
 
     if (ownerIndex === playerIndex) {
         showMessage(`🏠 ${cell.name} t'appartient.`);
         finishRoll(playerIndex, actionTurnId);
-        return;
+        return true;
     }
 
-    const owner = players[ownerIndex];
-    const rent = Math.max(25, Math.floor(cell.price * 0.25));
-    const playerBalanceBefore = player.money;
-    const ownerBalanceBefore = owner.money;
-
-    player.money -= rent;
-    owner.money += rent;
-
-    showMessage(
-        `💸 ${player.name} paie ${formatMoney(rent)} à ${owner.name}. ` +
-        `Solde : ${formatMoney(player.money)}.`
-    );
-    log(
-        `💸 ${player.name} : -${formatMoney(rent)} ` +
-        `(${formatMoney(playerBalanceBefore)} → ${formatMoney(player.money)}) | ` +
-        `${owner.name} : +${formatMoney(rent)} ` +
-        `(${formatMoney(ownerBalanceBefore)} → ${formatMoney(owner.money)}).`
-    );
-
-    updateMoney();
-    updatePlayers();
-
-    if (checkBankruptcy(playerIndex)) return;
-    finishRoll(playerIndex, actionTurnId);
+    return payRent(cell, playerIndex, ownerIndex, actionTurnId);
 }
 
 function buyProperty(cell, playerIndex, actionTurnId) {
-    if (!isActiveTurn(playerIndex, actionTurnId)) return;
+    if (
+        !isActiveTurn(playerIndex, actionTurnId) ||
+        !isActionAllowed(playerIndex, "buyProperty")
+    ) {
+        return false;
+    }
 
-    const player = players[playerIndex];
+    const player = getPlayer(playerIndex);
     if (getPropertyOwnerIndex(cell) !== -1) {
         showMessage("❌ Cette propriété vient d'être achetée.");
         updateAction();
         finishRoll(playerIndex, actionTurnId);
-        return;
+        return false;
     }
 
     if (player.money < cell.price) {
         showMessage("❌ Tu n'as pas assez d'argent.");
-        return;
+        return false;
     }
 
-    player.money -= cell.price;
+    debitMoney(playerIndex, cell.price);
     player.properties.push(cell.name);
 
     showMessage(
@@ -674,25 +805,57 @@ function buyProperty(cell, playerIndex, actionTurnId) {
     updateMoney();
     updatePlayers();
     finishRoll(playerIndex, actionTurnId);
+    return true;
+}
+
+function payRent(cell, playerIndex, ownerIndex, actionTurnId) {
+    const player = getPlayer(playerIndex);
+    const owner = getPlayer(ownerIndex);
+    const rent = Math.max(25, Math.floor(cell.price * 0.25));
+    const playerBalanceBefore = player.money;
+    const ownerBalanceBefore = owner.money;
+
+    if (!transferMoney(playerIndex, ownerIndex, rent)) {
+        return false;
+    }
+
+    showMessage(
+        `💸 ${player.name} paie ${formatMoney(rent)} à ` +
+        `${owner.name}. Solde : ${formatMoney(player.money)}.`
+    );
+    log(
+        `💸 ${player.name} : -${formatMoney(rent)} ` +
+        `(${formatMoney(playerBalanceBefore)} → ${formatMoney(player.money)}) | ` +
+        `${owner.name} : +${formatMoney(rent)} ` +
+        `(${formatMoney(ownerBalanceBefore)} → ${formatMoney(owner.money)}).`
+    );
+
+    updateMoney();
+    updatePlayers();
+
+    if (checkBankruptcy(playerIndex)) return true;
+    finishRoll(playerIndex, actionTurnId);
+    return true;
 }
 
 function payTax(amount, playerIndex, actionTurnId) {
-    const player = players[playerIndex];
-    player.money -= amount;
+    const player = getPlayer(playerIndex);
+    if (!debitMoney(playerIndex, amount)) return false;
 
     showMessage(`💰 Tu paies ${formatMoney(amount)} de taxe.`);
     log(`💰 ${player.name} paie ${formatMoney(amount)} de taxe.`);
     updateMoney();
     updatePlayers();
 
-    if (checkBankruptcy(playerIndex)) return;
+    if (checkBankruptcy(playerIndex)) return true;
     finishRoll(playerIndex, actionTurnId);
+    return true;
 }
 
 function receiveBonus(playerIndex, actionTurnId) {
-    const player = players[playerIndex];
+    const player = getPlayer(playerIndex);
     const balanceBefore = player.money;
-    player.money += BONUS_AMOUNT;
+    creditMoney(playerIndex, BONUS_AMOUNT);
 
     showMessage(
         `🎁 Bonus : +${formatMoney(BONUS_AMOUNT)}. ` +
@@ -705,6 +868,7 @@ function receiveBonus(playerIndex, actionTurnId) {
     updateMoney();
     updatePlayers();
     finishRoll(playerIndex, actionTurnId);
+    return true;
 }
 
 function applyChanceReward(
@@ -713,9 +877,9 @@ function applyChanceReward(
     amount,
     resultText
 ) {
-    const player = players[playerIndex];
+    const player = getPlayer(playerIndex);
     const balanceBefore = player.money;
-    player.money += amount;
+    creditMoney(playerIndex, amount);
 
     showMessage(
         `${resultText} Nouveau solde : ${formatMoney(player.money)}.`
@@ -725,34 +889,31 @@ function applyChanceReward(
         `(${formatMoney(balanceBefore)} → ${formatMoney(player.money)}).`
     );
     finishChance(playerIndex, actionTurnId);
+    return true;
 }
 
 function drawChance(playerIndex, actionTurnId) {
-    if (!isActiveTurn(playerIndex, actionTurnId)) return;
+    if (!isActiveTurn(playerIndex, actionTurnId)) return false;
 
-    const player = players[playerIndex];
+    const player = getPlayer(playerIndex);
     const cards = [
         {
             text: "💰 Tu gagnes 100 €.",
-            resolve: () => {
-                applyChanceReward(
-                    playerIndex,
-                    actionTurnId,
-                    100,
-                    "💰 Chance : tu gagnes 100 €."
-                );
-            }
+            resolve: () => applyChanceReward(
+                playerIndex,
+                actionTurnId,
+                100,
+                "💰 Chance : tu gagnes 100 €."
+            )
         },
         {
             text: "🎁 Bonus exceptionnel : +150 €.",
-            resolve: () => {
-                applyChanceReward(
-                    playerIndex,
-                    actionTurnId,
-                    BONUS_AMOUNT,
-                    "🎁 Chance : bonus exceptionnel de 150 €."
-                );
-            }
+            resolve: () => applyChanceReward(
+                playerIndex,
+                actionTurnId,
+                BONUS_AMOUNT,
+                "🎁 Chance : bonus exceptionnel de 150 €."
+            )
         },
         {
             text: "🚗 Avance de 3 cases.",
@@ -773,54 +934,54 @@ function drawChance(playerIndex, actionTurnId) {
                 updatePlayers();
                 setTimeout(
                     () => resolveCell(playerIndex, actionTurnId),
-                    350
+                    MOVE_RESOLVE_DELAY
                 );
+                return true;
             }
         },
         {
             text: "🏦 Tu récupères 75 €.",
-            resolve: () => {
-                applyChanceReward(
-                    playerIndex,
-                    actionTurnId,
-                    75,
-                    "🏦 Chance : tu récupères 75 €."
-                );
-            }
+            resolve: () => applyChanceReward(
+                playerIndex,
+                actionTurnId,
+                75,
+                "🏦 Chance : tu récupères 75 €."
+            )
         }
     ];
 
     const card = cards[Math.floor(Math.random() * cards.length)];
     showMessage(card.text);
     log(`🎲 Chance : ${card.text}`);
-    card.resolve();
+    return card.resolve();
 }
 
 function finishChance(playerIndex, actionTurnId) {
     updateMoney();
     updatePlayers();
-    if (checkBankruptcy(playerIndex)) return;
+    if (checkBankruptcy(playerIndex)) return false;
     finishRoll(playerIndex, actionTurnId);
+    return true;
 }
 
-function checkBankruptcy(playerIndex) {
-    const player = players[playerIndex];
-    if (player.money >= 0) return false;
-
-    player.bankrupt = true;
-    gameOver = true;
-    rolling = false;
-    movementInProgress = false;
-
-    const winner = players.find(
-        (candidate, index) =>
-            index !== playerIndex && !candidate.bankrupt
+function declareVictory(loserIndex) {
+    const loser = getPlayer(loserIndex);
+    const winnerIndex = gameState.players.findIndex(
+        (player, index) =>
+            index !== loserIndex && !player.bankrupt
     );
 
-    if (winner) {
+    gameState.winnerIndex =
+        winnerIndex === -1 ? null : winnerIndex;
+    gameState.gameOver = true;
+    gameState.rolling = false;
+    gameState.movementInProgress = false;
+
+    if (winnerIndex !== -1) {
+        const winner = getPlayer(winnerIndex);
         showMessage(
             `🏆 ${winner.name} gagne ! ` +
-            `${player.name} est en faillite.`
+            `${loser.name} est en faillite.`
         );
         log(`🏆 ${winner.name} remporte la partie !`);
     } else {
@@ -833,42 +994,68 @@ function checkBankruptcy(playerIndex) {
     updateAction();
     updatePlayers();
     updateBoard();
-    showGameOver(winner ? `${winner.name} remporte FortuneCity !` : "Partie terminée");
+    showGameOver(
+        winnerIndex === -1
+            ? "Partie terminée"
+            : `${getPlayer(winnerIndex).name} remporte FortuneCity !`
+    );
+}
+
+function checkBankruptcy(playerIndex) {
+    const player = getPlayer(playerIndex);
+    if (!player || player.money >= 0) return false;
+
+    player.bankrupt = true;
+    declareVictory(playerIndex);
     return true;
 }
 
 function finishRoll(playerIndex, actionTurnId) {
-    if (!isActiveTurn(playerIndex, actionTurnId)) return;
+    if (!isActiveTurn(playerIndex, actionTurnId)) return false;
 
-    rolling = false;
-    movementInProgress = false;
+    gameState.rolling = false;
+    gameState.movementInProgress = false;
     updateAction();
     if (rollButton) rollButton.disabled = false;
     if (endTurnButton) endTurnButton.disabled = false;
     updateMoney();
     updatePlayers();
+    return true;
 }
 
-function endTurn() {
-    if (rolling || movementInProgress || gameOver) return;
+function changeTurn(playerIndex = gameState.currentPlayer) {
+    if (!isActionAllowed(playerIndex, "endTurn")) return false;
 
-    turnId += 1;
-    let nextPlayer = (currentPlayer + 1) % players.length;
-    while (players[nextPlayer].bankrupt && nextPlayer !== currentPlayer) {
-        nextPlayer = (nextPlayer + 1) % players.length;
+    gameState.turnId += 1;
+    let nextPlayer =
+        (gameState.currentPlayer + 1) % gameState.players.length;
+
+    while (
+        gameState.players[nextPlayer].bankrupt &&
+        nextPlayer !== gameState.currentPlayer
+    ) {
+        nextPlayer =
+            (nextPlayer + 1) % gameState.players.length;
     }
 
-    currentPlayer = nextPlayer;
+    gameState.currentPlayer = nextPlayer;
     updateAction();
     if (diceElement) diceElement.textContent = "🎲 🎲";
-    showMessage(`🎮 À ${players[currentPlayer].name} de jouer !`);
-    log(`🎮 Tour de ${players[currentPlayer].name}.`);
+    showMessage(
+        `🎮 À ${gameState.players[nextPlayer].name} de jouer !`
+    );
+    log(`🎮 Tour de ${gameState.players[nextPlayer].name}.`);
     updateBoard();
     updateMoney();
     updatePlayers();
 
     if (rollButton) rollButton.disabled = false;
     if (endTurnButton) endTurnButton.disabled = true;
+    return true;
+}
+
+function endTurn(playerIndex = gameState.currentPlayer) {
+    return changeTurn(playerIndex);
 }
 
 function showGameOver(text) {
@@ -894,13 +1081,16 @@ function resetPlayerState(player) {
 
 function resetGame() {
     clearDiceAnimation();
-    turnId += 1;
-    players.forEach(resetPlayerState);
+    gameState.turnId += 1;
+    gameState.players.forEach(resetPlayerState);
 
-    currentPlayer = 0;
-    rolling = false;
-    movementInProgress = false;
-    gameOver = false;
+    gameState.currentPlayer = 0;
+    gameState.rolling = false;
+    gameState.movementInProgress = false;
+    gameState.gameOver = false;
+    gameState.winnerIndex = null;
+    gameState.lastDice = null;
+
     updateAction();
     hideModal();
     updateBoard();
@@ -915,12 +1105,207 @@ function resetGame() {
     if (newGameButton) newGameButton.disabled = false;
 }
 
+function getSerializableState() {
+    return {
+        players: gameState.players.map(player => ({
+            name: player.name,
+            emoji: player.emoji,
+            money: player.money,
+            position: player.position,
+            properties: [...player.properties],
+            inPrison: player.inPrison,
+            bankrupt: player.bankrupt
+        })),
+        currentPlayer: gameState.currentPlayer,
+        rolling: false,
+        movementInProgress: false,
+        gameOver: gameState.gameOver,
+        winnerIndex: gameState.winnerIndex,
+        lastDice: gameState.lastDice
+            ? {...gameState.lastDice}
+            : null,
+        history: gameState.history.map(entry => ({...entry}))
+    };
+}
+
+function exportGameState() {
+    return JSON.stringify(getSerializableState());
+}
+
+function normalizeImportedPlayer(player) {
+    if (
+        !player ||
+        typeof player.name !== "string" ||
+        typeof player.emoji !== "string" ||
+        !Number.isFinite(player.money) ||
+        !Number.isInteger(player.position) ||
+        player.position < 0 ||
+        player.position >= cellsData.length ||
+        !Array.isArray(player.properties)
+    ) {
+        return null;
+    }
+
+    return {
+        name: player.name,
+        emoji: player.emoji,
+        money: player.money,
+        position: player.position,
+        properties: [...new Set(
+            player.properties.filter(
+                property => typeof property === "string"
+            )
+        )],
+        inPrison: Boolean(player.inPrison),
+        bankrupt: Boolean(player.bankrupt)
+    };
+}
+
+function importGameState(snapshot) {
+    let parsed;
+
+    try {
+        parsed = typeof snapshot === "string"
+            ? JSON.parse(snapshot)
+            : snapshot;
+    } catch (error) {
+        return false;
+    }
+
+    if (
+        !parsed ||
+        !Array.isArray(parsed.players) ||
+        parsed.players.length < 2
+    ) {
+        return false;
+    }
+
+    const importedPlayers = parsed.players.map(normalizeImportedPlayer);
+    if (importedPlayers.some(player => player === null)) {
+        return false;
+    }
+
+    if (
+        !Number.isInteger(parsed.currentPlayer) ||
+        parsed.currentPlayer < 0 ||
+        parsed.currentPlayer >= importedPlayers.length
+    ) {
+        return false;
+    }
+
+    clearDiceAnimation();
+    gameState.turnId += 1;
+    gameState.players = importedPlayers;
+    gameState.currentPlayer = parsed.currentPlayer;
+    gameState.rolling = false;
+    gameState.movementInProgress = false;
+    gameState.gameOver = Boolean(parsed.gameOver);
+    gameState.winnerIndex =
+        Number.isInteger(parsed.winnerIndex) &&
+        parsed.winnerIndex >= 0 &&
+        parsed.winnerIndex < importedPlayers.length
+            ? parsed.winnerIndex
+            : null;
+    gameState.lastDice = parsed.lastDice &&
+        Number.isInteger(parsed.lastDice.die1) &&
+        Number.isInteger(parsed.lastDice.die2) &&
+        Number.isInteger(parsed.lastDice.total)
+        ? {...parsed.lastDice}
+        : null;
+    gameState.history = Array.isArray(parsed.history)
+        ? parsed.history
+            .filter(entry =>
+                entry &&
+                typeof entry.text === "string" &&
+                typeof entry.timestamp === "string"
+            )
+            .map(entry => ({
+                id: String(entry.id || `${Date.now()}-${historySequence++}`),
+                timestamp: entry.timestamp,
+                text: entry.text
+            }))
+        : [];
+
+    updateAction();
+    hideModal();
+    updateBoard();
+    updateMoney();
+    updatePlayers();
+    renderHistory();
+
+    if (diceElement) {
+        diceElement.textContent = gameState.lastDice
+            ? `${gameState.lastDice.die1} + ` +
+              `${gameState.lastDice.die2} = ` +
+              `${gameState.lastDice.total}`
+            : "🎲 🎲";
+    }
+    if (rollButton) {
+        rollButton.disabled = gameState.gameOver;
+    }
+    if (endTurnButton) endTurnButton.disabled = true;
+    showMessage("🎮 État de partie importé.");
+    return true;
+}
+
+function applyPlayerAction(
+    playerIndex,
+    actionType,
+    payload = {}
+) {
+    if (!isActionAllowed(playerIndex, actionType)) {
+        return false;
+    }
+
+    if (actionType === "roll") {
+        return rollDice(playerIndex);
+    }
+
+    if (actionType === "endTurn") {
+        return endTurn(playerIndex);
+    }
+
+    if (actionType === "buyProperty") {
+        return buyProperty(
+            payload.cell,
+            playerIndex,
+            payload.actionTurnId
+        );
+    }
+
+    if (actionType === "skipProperty") {
+        return finishRoll(playerIndex, payload.actionTurnId);
+    }
+
+    return false;
+}
+
+const multiplayerBridge = Object.freeze({
+    applyPlayerAction,
+    exportGameState,
+    importGameState,
+    isActionAllowed
+});
+
+if (typeof window !== "undefined") {
+    window.FortuneCityGame = multiplayerBridge;
+}
+
 if (rollButton) {
-    rollButton.addEventListener("click", rollDice);
+    rollButton.addEventListener(
+        "click",
+        () => applyPlayerAction(gameState.currentPlayer, "roll")
+    );
 }
 
 if (endTurnButton) {
-    endTurnButton.addEventListener("click", endTurn);
+    endTurnButton.addEventListener(
+        "click",
+        () => applyPlayerAction(
+            gameState.currentPlayer,
+            "endTurn"
+        )
+    );
 }
 
 if (newGameButton) {
